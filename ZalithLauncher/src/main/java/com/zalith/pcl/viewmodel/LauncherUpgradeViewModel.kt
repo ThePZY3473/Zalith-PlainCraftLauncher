@@ -58,9 +58,11 @@ import com.zalith.pcl.ui.components.SimpleListDialog
 import com.zalith.pcl.ui.screens.content.elements.DisabledAlpha
 import com.zalith.pcl.ui.upgrade.UpgradeDialog
 import com.zalith.pcl.ui.upgrade.UpgradeFilesDialog
+import com.zalith.pcl.BuildKeys
 import com.zalith.pcl.upgrade.GithubContentApi
 import com.zalith.pcl.upgrade.GithubReleaseApi
 import com.zalith.pcl.upgrade.RemoteData
+import com.zalith.pcl.upgrade.SiteApkListApi
 import com.zalith.pcl.upgrade.TooFrequentOperationException
 import com.zalith.pcl.utils.logging.Logger
 import com.zalith.pcl.utils.network.safeBodyAsJson
@@ -107,6 +109,14 @@ private const val LATEST_API_JSDELIVR_URL = "https://cdn.jsdelivr.net/gh/zuanxu5
 private const val UPDATE_TIMEOUT_MS = 60_000L
 /** GitHub Releases 最新版本接口：动态拉取安装包资产，避免在 latest_version_md.json 里写死 files。 */
 private const val RELEASE_LATEST_URL = "https://api.github.com/repos/zuanxu53-hub/ZPCL-Launcher/releases/latest"
+
+/**
+ * 官网的安装包列表口。
+ *
+ * 顺序上放在 GitHub 之前：`api.github.com` 在国内经常连不上，而官网（`URL_HOME`）是
+ * 国内直连的，失败再回退 GitHub —— 这样「查到新版本却看不到下载按钮」的情况就少了。
+ */
+private const val SITE_APK_LIST_PATH = "/api/apks"
 
 /**
  * 用于记录启动器更新 ViewModel
@@ -234,7 +244,7 @@ class LauncherUpgradeViewModel: ViewModel() {
                 //需要Base64解密
                 val contentString = decodeBase64(api.content)
                 GLOBAL_JSON.decodeFromString(RemoteData.serializer(), contentString)
-                    .let { it.copy(files = fetchReleaseAssets()) }
+                    .let { d -> d.copy(files = d.files.ifEmpty { fetchFiles() }) }
             }
         }.getOrElse { e ->
             if (Locale.getDefault().language == "zh") {
@@ -246,7 +256,7 @@ class LauncherUpgradeViewModel: ViewModel() {
                         Logger.info(TAG, "Check for updates via mirror: $url")
                         withRetry(logTag = "LauncherUpgrade_Chinese", maxRetries = 1) {
                             GLOBAL_CLIENT.get(url).safeBodyAsJson<RemoteData>()
-                                .let { it.copy(files = fetchReleaseAssets()) }
+                                .let { d -> d.copy(files = d.files.ifEmpty { fetchFiles() }) }
                         }
                     }.getOrNull()
                     if (result != null) break
@@ -260,6 +270,45 @@ class LauncherUpgradeViewModel: ViewModel() {
                 null
             }
         }
+    }
+
+    /**
+     * 取安装包列表：**先问官网，失败再回退 GitHub Releases**。
+     *
+     * 官网那台机器国内直连没问题（它就是给国内用户看的站点），而 `api.github.com`
+     * 经常被墙；原来只剩 GitHub 一条路时，用户会看到「有新版本，但没有任何可下载的包」。
+     */
+    private suspend fun fetchFiles(): List<RemoteData.RemoteFile> {
+        fetchSiteAssets().takeIf { it.isNotEmpty() }?.let { return it }
+        return fetchReleaseAssets()
+    }
+
+    /** 读官网 `/api/apks`；连不上或列表为空都返回空，交给 GitHub 兜底。 */
+    private suspend fun fetchSiteAssets(): List<RemoteData.RemoteFile> = runCatching {
+        val base = BuildKeys.URL_HOME.trim().trimEnd('/')
+        GLOBAL_CLIENT.get(base + SITE_APK_LIST_PATH)
+            .safeBodyAsJson<SiteApkListApi>()
+            .files
+            .map { f ->
+                RemoteData.RemoteFile(
+                    fileName = f.fileName,
+                    uri = f.uri,
+                    arch = siteArch(f.arch),
+                    size = f.size,
+                )
+            }
+    }.getOrElse { e ->
+        Logger.warning(TAG, "Failed to fetch site apk list!", e)
+        emptyList()
+    }
+
+    /** 官网接口里的 arch 是字符串，转成枚举。 */
+    private fun siteArch(raw: String): RemoteData.RemoteFile.Arch = when (raw.lowercase()) {
+        "arm64", "aarch64" -> RemoteData.RemoteFile.Arch.ARM64
+        "arm", "armeabi", "armeabi-v7a", "v7a" -> RemoteData.RemoteFile.Arch.ARM
+        "x86_64", "x64" -> RemoteData.RemoteFile.Arch.X86_64
+        "x86" -> RemoteData.RemoteFile.Arch.X86
+        else -> RemoteData.RemoteFile.Arch.ALL
     }
 
     /**
@@ -292,13 +341,16 @@ class LauncherUpgradeViewModel: ViewModel() {
     /** 从安装包文件名推断架构（如 `xxx-arm64-v8a.apk` → ARM64）。 */
     private fun inferArch(name: String): RemoteData.RemoteFile.Arch? {
         val n = name.lowercase()
+        if (!n.endsWith(".apk")) return null
         return when {
-            "universal" in n -> RemoteData.RemoteFile.Arch.ALL
             "arm64" in n -> RemoteData.RemoteFile.Arch.ARM64
-            "armeabi" in n -> RemoteData.RemoteFile.Arch.ARM
+            "armeabi" in n || "-v7a" in n -> RemoteData.RemoteFile.Arch.ARM
             "x86_64" in n -> RemoteData.RemoteFile.Arch.X86_64
             "x86" in n -> RemoteData.RemoteFile.Arch.X86
-            else -> null
+            "universal" in n || "-all" in n -> RemoteData.RemoteFile.Arch.ALL
+            // 文件名里没有 ABI 后缀的就是全架构包（构建脚本对 `-Darch=all` 不追加后缀，
+            // 以前的写法在这里返回 null，导致更新列表里永远缺一个「全架构」选项）。
+            else -> RemoteData.RemoteFile.Arch.ALL
         }
     }
 
