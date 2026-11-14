@@ -238,7 +238,10 @@ androidComponents {
                 }
 
                 (output.getFilter(ABI)?.identifier ?: "all").let { abi ->
-                    val baseName = "$launcherName-${if (variant.buildType == "release") launcherVersionName else "Debug-$launcherVersionName"}"
+                    // 产物名跟着对外显示名走（`ZPCL Launcher` → `ZPCL-Launcher-1.6.0-arm64-v8a.apk`），
+                    // 不再用内部模块名 / launcher_name，避免发行包名里出现旧名字。
+                    val baseName = launcherAPPName.replace(" ", "-") + "-" +
+                            (if (variant.buildType == "release") launcherVersionName else "Debug-$launcherVersionName")
                     output.outputFileName = if (abi == "all") "$baseName.apk" else "$baseName-$abi.apk"
                 }
             }
