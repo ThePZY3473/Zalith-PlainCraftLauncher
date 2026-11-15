@@ -39,14 +39,16 @@ import com.zalith.pcl.ui.pcl2.components.PclSelectDialog
 import com.zalith.pcl.ui.pcl2.components.PclUpgradeDialog
 import com.zalith.pcl.ui.pcl2.components.PclUpgradeDownloadDialog
 import com.zalith.pcl.ui.pcl2.components.PclUpgradeFilesDialog
+import com.zalith.pcl.ui.pcl2.components.PclUpgradeSourceDialog
 import com.zalith.pcl.ui.pcl2.components.pclMarkdownToPlain
 import com.zalith.pcl.ui.pcl2.data.PclRemoteContent
 import com.zalith.pcl.ui.pcl2.data.PclUpdateSources
 import com.zalith.pcl.upgrade.RemoteData
+import com.zalith.pcl.upgrade.UpdateSourceKind
 import com.zalith.pcl.upgrade.findCurrentBody
-import com.zalith.pcl.upgrade.getCurrentCouldDrive
 import com.zalith.pcl.viewmodel.LauncherUpgradeOperation
 import com.zalith.pcl.viewmodel.LauncherUpgradeViewModel
+import com.zalith.pcl.viewmodel.UpdateSourceState
 import java.util.Locale
 
 /**
@@ -124,23 +126,10 @@ fun PclUpgradeHost() {
                     "  →  最新版本 ${data.version}（${data.code}）",
                 bodyText = pclMarkdownToPlain(body.markdown),
                 onDownload = {
-                    val files = data.files
-                    when {
-                        // 资产没取到（GitHub API 不通 / 还没上传）→ 退回网盘
-                        files.isEmpty() -> {
-                            val drive = data.currentCloudDrive()
-                            upgradeViewModel.operation = if (drive == null) {
-                                LauncherUpgradeOperation.None
-                            } else {
-                                LauncherUpgradeOperation.OpenCloudDrive(drive)
-                            }
-                        }
-                        files.size == 1 -> {
-                            upgradeViewModel.operation = LauncherUpgradeOperation.None
-                            PclLauncherUpdate.start(context, data.version, files.first())
-                        }
-                        else -> upgradeViewModel.operation = LauncherUpgradeOperation.SelectApk(data)
-                    }
+                    // 「立即更新」不再直接开下，而是先进「选择下载源」：
+                    // 那边会并发握手，把连不上的源直接隐藏掉，用户看到的一定是
+                    // 当前网络下真能连上的几条路。选完源再看该源的安装包列表。
+                    upgradeViewModel.operation = LauncherUpgradeOperation.ChooseSource(data)
                 },
                 onIgnore = {
                     AllSettings.lastIgnoredVersion.save(data.code)
@@ -169,6 +158,57 @@ fun PclUpgradeHost() {
             )
         }
 
+        is LauncherUpgradeOperation.ChooseSource -> {
+            val data = operation.data
+            // 进入这一屏就开始握手探测。ViewModel 内部对「探测中」做了幂等，
+            // 重组不会重复打请求；关掉弹窗再进来会重新探测（网络环境可能已经变了）。
+            LaunchedEffect(data) { upgradeViewModel.startProbe() }
+            val state = upgradeViewModel.sourceState
+            val sources = (state as? UpdateSourceState.Ready)?.sources.orEmpty()
+
+            PclUpgradeSourceDialog(
+                // Idle 是「还没开始探测」的那一瞬，同样按等待态显示，
+                // 否则会先闪一下空列表。
+                probing = state is UpdateSourceState.Probing || state is UpdateSourceState.Idle,
+                options = sources.map { src ->
+                    val detail = if (src.kind == UpdateSourceKind.EXTERNAL) {
+                        // 网盘 / 群链接：没有包列表，也没有握手耗时，直接说明它是跳转。
+                        "跳转下载"
+                    } else {
+                        "${src.files.size} 个包  ·  ${src.latencyMs}ms"
+                    }
+                    src.id to "${src.name}  ·  $detail"
+                },
+                emptyMessage = (state as? UpdateSourceState.Empty)?.message,
+                onSelect = { id ->
+                    val src = sources.firstOrNull { it.id == id }
+                    when {
+                        src == null -> Unit
+
+                        // 不支持直链的入口（123 云盘、QQ 群）：选完直接用浏览器打开。
+                        // 这类源本来就没法「下载完自动安装」，卡在下载引擎里只会报错，
+                        // 所以这里什么都不下，把链接丢给系统浏览器就完事。
+                        src.kind == UpdateSourceKind.EXTERNAL -> {
+                            src.url?.takeIf { it.isNotBlank() }?.let { openLink(context, it) }
+                            upgradeViewModel.operation = LauncherUpgradeOperation.None
+                        }
+
+                        else -> upgradeViewModel.chooseSource(src)
+                    }
+                },
+                onDismiss = {
+                    upgradeViewModel.resetProbe()
+                    // 【时序坑】选中某一项后，弹窗退出动画播完还会再回调一次 onDismiss。
+                    // 无条件写 None 会把这个回调里刚设好的 SelectApk 覆盖掉 ——
+                    // 表现就是「点了源，弹窗关掉，什么都没发生」。
+                    // 只有 operation 还停在本弹窗这一档时才清空。
+                    if (upgradeViewModel.operation === operation) {
+                        upgradeViewModel.operation = LauncherUpgradeOperation.None
+                    }
+                },
+            )
+        }
+
         is LauncherUpgradeOperation.SelectApk -> {
             val data = operation.data
             val deviceArch = remember { currentLauncherArch() }
@@ -187,14 +227,26 @@ fun PclUpgradeHost() {
                     ?: ordered.firstOrNull { it.arch == RemoteData.RemoteFile.Arch.ALL }?.fileName
             }
             PclUpgradeFilesDialog(
-                title = "选择要下载的安装包（${data.version}）",
-                // 只显示「版本 · 架构」，不显示 GitHub 的长链接
-                options = ordered.map { it.fileName to "${data.version} · ${it.arch.abiText()}" },
+                // 标题带上源名，用户能确认自己刚才选的是哪一条链路。
+                title = if (operation.sourceName != null) {
+                    "选择要下载的安装包（${data.version} · ${operation.sourceName}）"
+                } else {
+                    "选择要下载的安装包（${data.version}）"
+                },
+                // 只显示「版本 · 架构 · 大小」，不显示长链接
+                options = ordered.map {
+                    it.fileName to "${data.version} · ${it.arch.abiText()} · ${formatUpdateSize(it.size)}"
+                },
                 current = defaultFile,
                 onSelect = { fileName ->
                     upgradeViewModel.operation = LauncherUpgradeOperation.None
-                    ordered.firstOrNull { it.fileName == fileName }?.let {
-                        PclLauncherUpdate.start(context, data.version, it)
+                    ordered.firstOrNull { it.fileName == fileName }?.let { picked ->
+                        // 其它可用源里同架构的地址作为备用：主源下到一半断了会自动换。
+                        val fallback = operation.alternatives
+                            .filter { it.arch == picked.arch && it.uri != picked.uri }
+                            .map { it.uri }
+                            .distinct()
+                        PclLauncherUpdate.start(context, data.version, picked, fallback)
                     }
                 },
                 onDismiss = { upgradeViewModel.operation = LauncherUpgradeOperation.None },
@@ -280,9 +332,4 @@ fun PclUpgradeHost() {
             )
         }
     }
-}
-
-/** 当前语言对应的网盘；没配多网盘时退回 [RemoteData.defaultCloudDrive]。 */
-private fun RemoteData.currentCloudDrive(): RemoteData.CloudDrive? {
-    return getCurrentCouldDrive(Locale.getDefault()) ?: defaultCloudDrive
 }

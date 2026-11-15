@@ -37,6 +37,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -112,6 +113,9 @@ internal object PclLauncherUpdate {
     private var pendingFile: File? = null
     private var pendingRemote: RemoteData.RemoteFile? = null
 
+    /** 上一轮选中的源之外的其它可用源地址，重试时继续带上。 */
+    private var pendingFallback: List<String> = emptyList()
+
     /**
      * 用户点了「去授权」。
      *
@@ -135,11 +139,23 @@ internal object PclLauncherUpdate {
      *
      * 复用游戏资源的下载引擎（[DownloadEngine]）：它自带失败换源、断点重试与进度统计，
      * 不必为「下载一个 APK」再写一套。
+     *
+     * @param fallbackUris 其它更新源里**同架构**的下载地址。以前这里只传
+     *   `listOf(file.uri)`：注释写着「自带失败换源」，但一个列表只有一个元素，
+     *   等于换源能力完全没用上 —— 官网那条链接 404 或握手超时，用户只能对着
+     *   「下载失败」反复重试同一条地址。现在把探测阶段拿到的其它源一并带上。
      */
-    fun start(context: Context, version: String, file: RemoteData.RemoteFile) {
+    fun start(
+        context: Context,
+        version: String,
+        file: RemoteData.RemoteFile,
+        fallbackUris: List<String> = emptyList(),
+    ) {
         val app = context.applicationContext
+        val previous = job
         job?.cancel()
         pendingRemote = file
+        pendingFallback = fallbackUris
         val archText = file.arch.abiText()
         state = PclLauncherUpdateState.Downloading(
             version = version,
@@ -149,10 +165,20 @@ internal object PclLauncherUpdate {
             speed = 0L,
         )
         job = scope.launch {
+            // 等上一轮真正结束再动手：只 cancel 不 join 的话，旧协程可能还停在
+            // 写文件的中间态，两个协程会往同一个 target 里各写一段，装出来的包是坏的。
+            previous?.cancelAndJoin()
+
             val dir = File(app.cacheDir, "launcher_update").apply { mkdirs() }
-            val target = File(dir, file.fileName.substringAfterLast('/'))
+            // 文件名来自远端（官网后台可填），不能直接拿来拼路径：
+            // `../../xxx` 或带反斜杠的名字会写到缓存目录外面去。
+            val target = File(dir, safeUpdateFileName(file.fileName))
             // 上一次没下完的残file会让引擎以为已经下好了，直接删掉重来
             runCatching { if (target.exists()) target.delete() }
+
+            val urls = (listOf(file.uri) + fallbackUris)
+                .filter { it.isNotBlank() }
+                .distinct()
 
             val stats = DownloadStats()
             val progress = launch {
@@ -172,7 +198,7 @@ internal object PclLauncherUpdate {
             try {
                 DownloadEngine.download(
                     request = DownloadRequest(
-                        urls = listOf(file.uri),
+                        urls = urls,
                         targetFile = target,
                         expectedSize = file.size,
                     ),
@@ -197,10 +223,10 @@ internal object PclLauncherUpdate {
         }
     }
 
-    /** 重试上一次失败的下载。 */
+    /** 重试上一次失败的下载（仍然带上备用源）。 */
     fun retry(context: Context) {
         val file = pendingRemote ?: return
-        start(context, currentVersionText().ifEmpty { "最新版本" }, file)
+        start(context, currentVersionText().ifEmpty { "最新版本" }, file, pendingFallback)
     }
 
     fun cancel() {
@@ -282,6 +308,23 @@ internal object PclLauncherUpdate {
     }
 
     private const val PROGRESS_INTERVAL_MS = 300L
+}
+
+/**
+ * 把远端给的文件名压成一个安全的本地文件名。
+ *
+ * 原来直接 `fileName.substringAfterLast('/')` 就拼进 `cacheDir`：官网后台的
+ * 「安装包管理」文件名是自由填写的，一个带 `..` 或反斜杠的名字就能让目标路径
+ * 跑到缓存目录外面去（Windows 风格的 `a\b.apk` 在 Android 上不会被 `substringAfterLast('/')`
+ * 切开，整串会当成文件名，虽然后果有限，但不该把远端字符串直接当路径用）。
+ *
+ * 规则：只留字母数字与 `._-`，其余替换成下划线；不是 `.apk` 的一律回退到固定名。
+ */
+internal fun safeUpdateFileName(raw: String): String {
+    val base = raw.substringAfterLast('/').substringAfterLast('\\').trim()
+    val cleaned = base.replace(Regex("[^A-Za-z0-9._-]"), "_").trimStart('.')
+    return cleaned.takeIf { it.length > 4 && it.endsWith(".apk", ignoreCase = true) }
+        ?: "launcher-update.apk"
 }
 
 /** 字节数的紧凑写法：`181.6 MB`。 */

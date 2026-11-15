@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,10 +61,13 @@ import com.zalith.pcl.ui.upgrade.UpgradeDialog
 import com.zalith.pcl.ui.upgrade.UpgradeFilesDialog
 import com.zalith.pcl.BuildKeys
 import com.zalith.pcl.upgrade.GithubContentApi
-import com.zalith.pcl.upgrade.GithubReleaseApi
 import com.zalith.pcl.upgrade.RemoteData
-import com.zalith.pcl.upgrade.SiteApkListApi
 import com.zalith.pcl.upgrade.TooFrequentOperationException
+import com.zalith.pcl.upgrade.UpdateSourceKind
+import com.zalith.pcl.upgrade.UpdateSourceProbe
+import com.zalith.pcl.upgrade.UpgradeSource
+import com.zalith.pcl.ui.pcl2.data.PclRemoteContent
+import com.zalith.pcl.ui.pcl2.data.PclUpdateSources
 import com.zalith.pcl.utils.logging.Logger
 import com.zalith.pcl.utils.network.safeBodyAsJson
 import com.zalith.pcl.utils.network.withRetry
@@ -83,11 +87,46 @@ private const val TAG = "LauncherUpgradeVM"
 sealed interface LauncherUpgradeOperation {
     data object None : LauncherUpgradeOperation
     /** 已检查到启动器存在新版本，展示更新信息 */
-    data class Upgrade(val data: RemoteData) : LauncherUpgradeOperation
+    data class Upgrade(
+        val data: RemoteData,
+        /** 已选中的更新源名字；为空表示还没选源，点「立即更新」会先进选源框。 */
+        val sourceName: String? = null,
+    ) : LauncherUpgradeOperation
     /** 选择要安装的安装包文件 */
-    data class SelectApk(val data: RemoteData) : LauncherUpgradeOperation
+    data class SelectApk(
+        val data: RemoteData,
+        val sourceName: String? = null,
+        /**
+         * 其它可用源的安装包。选中某个架构后，按 [RemoteData.RemoteFile.arch] 过滤出
+         * 同架构的地址一并交给下载引擎做备用 —— 主源下到一半断了能自动换到另一个源，
+         * 而不是让用户对着「下载失败」重试同一条坏链接。
+         */
+        val alternatives: List<RemoteData.RemoteFile> = emptyList(),
+    ) : LauncherUpgradeOperation
+    /** 选择从哪个源下载（先握手探测，连不上的源不列出来） */
+    data class ChooseSource(val data: RemoteData) : LauncherUpgradeOperation
     /** 打开网盘分享 */
     data class OpenCloudDrive(val cloudDrive: RemoteData.CloudDrive) : LauncherUpgradeOperation
+}
+
+/**
+ * 更新源探测的界面状态。
+ *
+ * 与 [LauncherUpgradeOperation] 分开：弹窗要不要显示、显示什么，取决于探测进度；
+ * 而「当前该弹哪个框」由 operation 决定。两者混在一个 sealed 里会让「探测完但用户
+ * 已经关掉弹窗」这种情况变得很难表达。
+ */
+sealed interface UpdateSourceState {
+    data object Idle : UpdateSourceState
+
+    /** 正在并发握手，界面上显示「正在测试下载源」。 */
+    data object Probing : UpdateSourceState
+
+    /** 探测完成，[sources] 一定非空（空的走 [Empty]）。 */
+    data class Ready(val sources: List<UpgradeSource>) : UpdateSourceState
+
+    /** 所有源都握手失败：给一句说明 + 退回网盘的入口。 */
+    data class Empty(val message: String) : UpdateSourceState
 }
 
 /**
@@ -107,16 +146,16 @@ private const val LATEST_API_JSDELIVR_URL = "https://cdn.jsdelivr.net/gh/zuanxu5
 
 /** 一次「检查更新」最多等这么久（毫秒）：超时就当失败，别让按钮一直转。 */
 private const val UPDATE_TIMEOUT_MS = 60_000L
-/** GitHub Releases 最新版本接口：动态拉取安装包资产，避免在 latest_version_md.json 里写死 files。 */
-private const val RELEASE_LATEST_URL = "https://api.github.com/repos/zuanxu53-hub/ZPCL-Launcher/releases/latest"
+// GitHub Releases 接口地址已挪进 UpdateSourceProbe（那边要独立探测，不能依赖 ViewModel）。
 
 /**
- * 官网的安装包列表口。
+ * 官网兜底地址。
  *
- * 顺序上放在 GitHub 之前：`api.github.com` 在国内经常连不上，而官网（`URL_HOME`）是
- * 国内直连的，失败再回退 GitHub —— 这样「查到新版本却看不到下载按钮」的情况就少了。
+ * `zpcl.fun` 是当前证书实际签发的域名（`zpcl.craftmc.cn` 会 301 过来）。编译期的
+ * `url_home` 写的是 `z-pcl.cc.cd:28722`，实测部分网络下这个端口连不上 ——
+ * 两个都放进候选里探测，比赌其中一个可靠。
  */
-private const val SITE_APK_LIST_PATH = "/api/apks"
+private const val FALLBACK_SITE_BASE = "https://zpcl.fun"
 
 /**
  * 用于记录启动器更新 ViewModel
@@ -124,7 +163,107 @@ private const val SITE_APK_LIST_PATH = "/api/apks"
 class LauncherUpgradeViewModel: ViewModel() {
     var operation by mutableStateOf<LauncherUpgradeOperation>(LauncherUpgradeOperation.None)
 
+    /** 「选择更新源」弹窗的探测进度。只在 [LauncherUpgradeOperation.ChooseSource] 期间有意义。 */
+    var sourceState by mutableStateOf<UpdateSourceState>(UpdateSourceState.Idle)
+        private set
+
     private val checkMutex = Mutex()
+
+    /**
+     * 开始探测更新源。
+     *
+     * 同一个弹窗被重复组合时会反复调到这里，[UpdateSourceState.Probing] 期间直接返回，
+     * 避免每次重组都重开一轮 5 个并发请求。探测本身有 4 秒单源上限，
+     * 最坏情况就是 4 秒后出结果。
+     */
+    fun startProbe() {
+        if (sourceState is UpdateSourceState.Probing) return
+        sourceState = UpdateSourceState.Probing
+        viewModelScope.launch {
+            val direct = runCatching { UpdateSourceProbe.probeAll(siteBases()) }
+                .onFailure { Logger.warning(TAG, "更新源探测异常：${it.javaClass.simpleName}: ${it.message}") }
+                .getOrDefault(emptyList())
+            // 直链源排前面（按握手耗时），跳转类入口附在最后。
+            val sources = direct + externalSources()
+            sourceState = if (sources.isEmpty()) {
+                UpdateSourceState.Empty("当前网络下所有下载源都没能在 4 秒内握手成功。")
+            } else {
+                Logger.info(TAG, "可用更新源 ${sources.size} 个：${sources.joinToString { "${it.name}(${it.kind})" }}")
+                UpdateSourceState.Ready(sources)
+            }
+        }
+    }
+
+    /**
+     * 官网「下载方式」里那些**不提供直链**的入口（123 云盘、QQ 群）。
+     *
+     * 它们不是安装包列表，没法用来下载，但用户必须能看到 —— 直链全挂的时候，
+     * 这是唯一的出路。选中后由界面直接丢给浏览器打开，不经过下载引擎。
+     *
+     * GitHub / gh-proxy 那几条会被过滤掉：探测阶段已经把它们变成了真正的直链源，
+     * 重复列出来只会让用户困惑（同一个包出现两次）。
+     */
+    private suspend fun externalSources(): List<UpgradeSource> =
+        runCatching { PclUpdateSources.fetchAll() }
+            .onFailure { Logger.warning(TAG, "拉取官网下载方式失败：${it.message}") }
+            .getOrDefault(emptyList())
+            .filterNot { src ->
+                val u = src.url.lowercase()
+                u.contains("github.com") || u.contains("gh-proxy")
+            }
+            .map { src ->
+                UpgradeSource(
+                    id = "external:${src.url}",
+                    name = src.name.ifBlank { "网盘下载" },
+                    kind = UpdateSourceKind.EXTERNAL,
+                    files = emptyList(),
+                    latencyMs = 0L,
+                    origin = src.url,
+                    url = src.url,
+                )
+            }
+
+    /**
+     * 用户选定了某个源：把它给的安装包列表当成这一轮的候选，直接进「选安装包」。
+     *
+     * 其余可用源的同架构包作为备用地址带上（见 [LauncherUpgradeOperation.SelectApk.alternatives]）。
+     */
+    fun chooseSource(source: UpgradeSource) {
+        val data = (operation as? LauncherUpgradeOperation.ChooseSource)?.data ?: return
+        val others = (sourceState as? UpdateSourceState.Ready)?.sources.orEmpty()
+            .filter { it.id != source.id }
+            .flatMap { it.files }
+        operation = LauncherUpgradeOperation.SelectApk(
+            data = data.copy(files = source.files),
+            sourceName = source.name,
+            alternatives = others,
+        )
+        sourceState = UpdateSourceState.Idle
+    }
+
+    /** 关掉选源框时复位，下次打开重新探测（网络环境可能已经变了）。 */
+    fun resetProbe() {
+        sourceState = UpdateSourceState.Idle
+    }
+
+    /**
+     * 官网候选地址。
+     *
+     * 这里有三个来源，按优先级：
+     *  1. [BuildKeys.URL_HOME] —— 编译期 `url_home`（当前写的是 `z-pcl.cc.cd:28722`）；
+     *  2. [PclRemoteContent.baseUrl] —— 运行期可被 MMKV 覆盖的那个站点根地址；
+     *  3. `https://zpcl.fun` —— 实测可用的正式域名兜底。
+     *
+     * 以前只认第 1 个：那个域名一旦连不上（换域名/端口被封），官网接口就永远失败，
+     * 启动器只能回退 GitHub —— 而 GitHub 在国内又经常连不上，最后就是「有更新但下不了」。
+     * 现在三个一起探测，哪个通就用哪个；全都不通就把官网相关的源隐藏掉。
+     */
+    private fun siteBases(): List<String> = buildList {
+        BuildKeys.URL_HOME.trim().trimEnd('/').takeIf { it.isNotBlank() }?.let(::add)
+        runCatching { PclRemoteContent.baseUrl() }.getOrNull()
+            ?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() }?.let(::add)
+        add(FALLBACK_SITE_BASE)
+    }.distinct()
 
     /**
      * 检查是否在限频时间内
@@ -243,8 +382,13 @@ class LauncherUpgradeViewModel: ViewModel() {
                 val api = GLOBAL_CLIENT.get(LATEST_API_URL).safeBodyAsJson<GithubContentApi>()
                 //需要Base64解密
                 val contentString = decodeBase64(api.content)
+                // 这里**不再顺带拉安装包列表**。
+                //
+                // 以前是 `files.ifEmpty { fetchFiles() }`：只要 json 里没写死 files，
+                // 每次检查更新都会额外打一次官网 `/api/apks`。而官网域名一旦连不上，
+                // 这一步要等 30 秒超时 × 重试，用户点「检查更新」看到的是一分钟的转圈。
+                // 现在列表改由「选择更新源」阶段按源并发探测，这里只负责版本信息。
                 GLOBAL_JSON.decodeFromString(RemoteData.serializer(), contentString)
-                    .let { d -> d.copy(files = d.files.ifEmpty { fetchFiles() }) }
             }
         }.getOrElse { e ->
             if (Locale.getDefault().language == "zh") {
@@ -256,7 +400,6 @@ class LauncherUpgradeViewModel: ViewModel() {
                         Logger.info(TAG, "Check for updates via mirror: $url")
                         withRetry(logTag = "LauncherUpgrade_Chinese", maxRetries = 1) {
                             GLOBAL_CLIENT.get(url).safeBodyAsJson<RemoteData>()
-                                .let { d -> d.copy(files = d.files.ifEmpty { fetchFiles() }) }
                         }
                     }.getOrNull()
                     if (result != null) break
@@ -272,87 +415,11 @@ class LauncherUpgradeViewModel: ViewModel() {
         }
     }
 
-    /**
-     * 取安装包列表：**先问官网，失败再回退 GitHub Releases**。
-     *
-     * 官网那台机器国内直连没问题（它就是给国内用户看的站点），而 `api.github.com`
-     * 经常被墙；原来只剩 GitHub 一条路时，用户会看到「有新版本，但没有任何可下载的包」。
-     */
-    private suspend fun fetchFiles(): List<RemoteData.RemoteFile> {
-        fetchSiteAssets().takeIf { it.isNotEmpty() }?.let { return it }
-        return fetchReleaseAssets()
-    }
-
-    /** 读官网 `/api/apks`；连不上或列表为空都返回空，交给 GitHub 兜底。 */
-    private suspend fun fetchSiteAssets(): List<RemoteData.RemoteFile> = runCatching {
-        val base = BuildKeys.URL_HOME.trim().trimEnd('/')
-        GLOBAL_CLIENT.get(base + SITE_APK_LIST_PATH)
-            .safeBodyAsJson<SiteApkListApi>()
-            .files
-            .map { f ->
-                RemoteData.RemoteFile(
-                    fileName = f.fileName,
-                    uri = f.uri,
-                    arch = siteArch(f.arch),
-                    size = f.size,
-                )
-            }
-    }.getOrElse { e ->
-        Logger.warning(TAG, "Failed to fetch site apk list!", e)
-        emptyList()
-    }
-
-    /** 官网接口里的 arch 是字符串，转成枚举。 */
-    private fun siteArch(raw: String): RemoteData.RemoteFile.Arch = when (raw.lowercase()) {
-        "arm64", "aarch64" -> RemoteData.RemoteFile.Arch.ARM64
-        "arm", "armeabi", "armeabi-v7a", "v7a" -> RemoteData.RemoteFile.Arch.ARM
-        "x86_64", "x64" -> RemoteData.RemoteFile.Arch.X86_64
-        "x86" -> RemoteData.RemoteFile.Arch.X86
-        else -> RemoteData.RemoteFile.Arch.ALL
-    }
-
-    /**
-     * 从 GitHub Releases 最新版本动态拉取安装包资产列表。
-     *
-     * 这样 `latest_version_md.json` 里就**不用写死 files**：每次发新版只需把 APK 上传到
-     * GitHub Release，启动器就能自动拿到全部安装包的下载地址、架构和大小。
-     * 拉取失败（断网 / 被墙）时返回空列表，此时仍可通过网盘链接手动下载。
-     */
-    private suspend fun fetchReleaseAssets(): List<RemoteData.RemoteFile> {
-        return runCatching {
-            GLOBAL_CLIENT.get(RELEASE_LATEST_URL).safeBodyAsJson<GithubReleaseApi>()
-                .assets
-                .mapNotNull { asset ->
-                    inferArch(asset.name)?.let { arch ->
-                        RemoteData.RemoteFile(
-                            fileName = asset.name,
-                            uri = asset.downloadUrl,
-                            arch = arch,
-                            size = asset.size,
-                        )
-                    }
-                }
-        }.getOrElse { e ->
-            Logger.warning(TAG, "Failed to fetch release assets!", e)
-            emptyList()
-        }
-    }
-
-    /** 从安装包文件名推断架构（如 `xxx-arm64-v8a.apk` → ARM64）。 */
-    private fun inferArch(name: String): RemoteData.RemoteFile.Arch? {
-        val n = name.lowercase()
-        if (!n.endsWith(".apk")) return null
-        return when {
-            "arm64" in n -> RemoteData.RemoteFile.Arch.ARM64
-            "armeabi" in n || "-v7a" in n -> RemoteData.RemoteFile.Arch.ARM
-            "x86_64" in n -> RemoteData.RemoteFile.Arch.X86_64
-            "x86" in n -> RemoteData.RemoteFile.Arch.X86
-            "universal" in n || "-all" in n -> RemoteData.RemoteFile.Arch.ALL
-            // 文件名里没有 ABI 后缀的就是全架构包（构建脚本对 `-Darch=all` 不追加后缀，
-            // 以前的写法在这里返回 null，导致更新列表里永远缺一个「全架构」选项）。
-            else -> RemoteData.RemoteFile.Arch.ALL
-        }
-    }
+    // 安装包列表的获取已迁移到 [UpdateSourceProbe]：
+    // 那里按「源」并发握手，连不上的源直接不显示，而不是在这里静默回退到 GitHub。
+    // 以前那套 fetchFiles / fetchSiteAssets / fetchReleaseAssets 的问题是：
+    // 官网返回非空就彻底短路 GitHub（官网给了 5 条但全失效时没有任何兜底），
+    // 官网返回空才回退，而回退那一步在国内容易被墙 —— 用户只看到「没有可下载的包」。
 
     /**
      * 检查启动器是否需要更新
@@ -415,6 +482,17 @@ fun LauncherUpgradeOperation(
                     onChanged(LauncherUpgradeOperation.OpenCloudDrive(cloudDrive))
                 }
             )
+        }
+        is LauncherUpgradeOperation.ChooseSource -> {
+            // 上游 Material 界面没有「选源」这一屏：这里直接按 json 里给的 files 进选包，
+            // 没有就关掉。否则 operation 会停在一个没人渲染的状态 —— 弹窗消失、点什么都不开。
+            // PCL 界面走的是完整流程，见 PclUpgradeHost。
+            LaunchedEffect(operation) {
+                onChanged(
+                    if (operation.data.files.isEmpty()) LauncherUpgradeOperation.None
+                    else LauncherUpgradeOperation.SelectApk(operation.data)
+                )
+            }
         }
         is LauncherUpgradeOperation.SelectApk -> {
             UpgradeFilesDialog(

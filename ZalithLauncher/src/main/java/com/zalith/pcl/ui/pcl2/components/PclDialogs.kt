@@ -1439,3 +1439,103 @@ private fun PclCustomizableEnvItem(unit: EnvSettingUnit.Customizable) {
         )
     }
 }
+
+/* ============================================================================
+ *  启动器更新：选择下载源
+ * ==========================================================================*/
+
+/**
+ * 「先选下载源，再看安装包列表」的第一屏。
+ *
+ * ---- 为什么要有这一屏
+ *
+ * 以前「立即更新」直接开始下载，用户既不知道这个包是从官网、GitHub 还是加速站拿的，
+ * 也不知道那条链路此刻通不通。国内网络下这几种源的可达性差别极大：官网可能换过域名、
+ * `api.github.com` 常年握手超时、gh-proxy 时好时坏 —— 结果就是「点了立即更新，进度条
+ * 一动不动，最后报下载失败」，用户没有任何可操作的空间。
+ *
+ * 现在先并发握手：**连不上的源直接不显示**，只把真正能连上的列出来，并标出握手耗时
+ * 与包数量。用户选一个，才去拉那个源的安装包列表。
+ *
+ * @param probing 还在探测中（此时列表为空，只显示一句等待提示）。
+ * @param options `源 id to 展示文字`，文字里带包数量和握手耗时。
+ * @param emptyMessage 全部失败时的说明；非空时不显示列表。
+ */
+@Composable
+fun PclUpgradeSourceDialog(
+    probing: Boolean,
+    options: List<Pair<String, String>>,
+    emptyMessage: String?,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+    cloudButtonText: String? = null,
+    onCloudButton: (() -> Unit)? = null,
+) {
+    val p = pclPalette
+    val cloudText = cloudButtonText?.takeIf { it.isNotBlank() && onCloudButton != null }
+    PclDialogContainer(onDismiss = onDismiss) { requestClose ->
+        PclMsgFrame(
+            title = "选择下载源",
+            buttons = {
+                if (cloudText != null) {
+                    PclMsgButton(text = cloudText) {
+                        onCloudButton?.invoke()
+                        requestClose()
+                    }
+                }
+                PclMsgButton(text = MSG_BTN_CANCEL, onClick = requestClose)
+            },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = PclDimens.msgBodyStart,
+                        end = PclDimens.msgBodyEnd,
+                        bottom = PclDimens.msgBodyBottomTight,
+                    ),
+            ) {
+                when {
+                    probing -> {
+                        Text(text = "正在测试下载源…", style = PclTextStyle.listInfo(p))
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "连不上的源会被自动隐藏，每个源最多等 4 秒。",
+                            style = PclTextStyle.listInfo(p),
+                        )
+                    }
+                    emptyMessage != null -> {
+                        Text(text = emptyMessage, style = PclTextStyle.listInfo(p))
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "可以改用网盘下载，或换个网络再试一次。",
+                            style = PclTextStyle.listInfo(p),
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 260.dp),
+                        ) {
+                            items(options.size) { index ->
+                                val (id, label) = options[index]
+                                PclListItem(
+                                    title = label,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    type = PclListItemType.RadioBox,
+                                    checked = false,
+                                    height = 40.dp,
+                                    onClick = {
+                                        onSelect(id)
+                                        requestClose()
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

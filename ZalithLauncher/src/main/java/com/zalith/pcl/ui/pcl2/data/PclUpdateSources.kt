@@ -54,6 +54,9 @@ object PclUpdateSources {
 
     private const val TIMEOUT_MS = 8000
 
+    /** 官网兜底地址，与更新源探测（UpdateSourceProbe）用的是同一个。 */
+    private const val FALLBACK_BASE_URL = "https://zpcl.fun"
+
     /**
      * 一条网盘入口。
      *
@@ -64,7 +67,7 @@ object PclUpdateSources {
     data class Source(val key: String, val name: String, val url: String)
 
     @Volatile
-    private var cached: Source? = null
+    private var cached: List<Source> = emptyList()
 
     @Volatile
     private var diskLoaded = false
@@ -78,24 +81,34 @@ object PclUpdateSources {
             diskLoaded = true
             cached = readDisk()
         }
-        return cached
+        return cached.firstOrNull { it.isCloudPan() } ?: cached.firstOrNull()
     }
 
     /**
-     * 联网拉「123 云盘」那条；失败退回缓存。
+     * 联网拉**全部**下载方式；失败退回缓存。
      *
-     * 5 分钟内成功过就直接用缓存，避免更新框 → 选架构框连续两次请求。
+     * 以前只挑「123 云盘」一条，其余几条（QQ 群、加速站）直接丢掉。
+     * 现在「选择下载源」列表要把不支持直链的入口也列出来（选中就用浏览器打开），
+     * 所以这里必须返回完整列表。
+     *
+     * 5 分钟内成功过就直接用缓存，避免更新框 → 选源框连续两次请求。
      */
-    suspend fun fetch(): Source? = withContext(Dispatchers.IO) {
+    suspend fun fetchAll(): List<Source> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        val fromMemory = cachedSource()
-        if (fromMemory != null && now - lastSuccessAt < FRESH_MS) return@withContext fromMemory
+        val fromMemory = run {
+            if (!diskLoaded) {
+                diskLoaded = true
+                cached = readDisk()
+            }
+            cached
+        }
+        if (fromMemory.isNotEmpty() && now - lastSuccessAt < FRESH_MS) return@withContext fromMemory
 
         val fetched = runCatching { fetchBlocking() }.getOrElse { e ->
-            Logger.warning(LOG_TAG, "拉取网盘入口失败：${e.javaClass.simpleName}: ${e.message}")
+            Logger.warning(LOG_TAG, "拉取下载方式失败：${e.javaClass.simpleName}: ${e.message}")
             null
         }
-        if (fetched != null) {
+        if (!fetched.isNullOrEmpty()) {
             cached = fetched
             lastSuccessAt = System.currentTimeMillis()
             writeDisk(fetched)
@@ -105,12 +118,26 @@ object PclUpdateSources {
         }
     }
 
-    private fun fetchBlocking(): Source? {
-        val base = PclRemoteContent.baseUrl()
-        if (base.isEmpty()) {
-            Logger.warning(LOG_TAG, "未配置官网地址，跳过网盘入口")
-            return null
+    /** 只取「网盘」那一条，给更新框上的网盘按钮用。 */
+    suspend fun fetch(): Source? = fetchAll().firstOrNull { it.isCloudPan() }
+
+    private fun fetchBlocking(): List<Source>? {
+        // 和更新源探测一样，官网地址不止一个：编译期常量可能已经换域名了，
+        // 这里再兜一个实测可用的正式域名，避免「直链源探测得到、跳转入口却没有」。
+        val bases = buildList {
+            val primary = PclRemoteContent.baseUrl()
+            if (primary.isNotEmpty()) add(primary)
+            add(FALLBACK_BASE_URL)
+        }.distinct()
+
+        for (base in bases) {
+            val list = fetchFrom(base)
+            if (!list.isNullOrEmpty()) return list
         }
+        return null
+    }
+
+    private fun fetchFrom(base: String): List<Source>? {
         var conn: HttpURLConnection? = null
         return try {
             conn = URL("$base/api/downloads").openConnection() as HttpURLConnection
@@ -120,58 +147,69 @@ object PclUpdateSources {
             conn.setRequestProperty("Accept", "application/json")
             val code = conn.responseCode
             if (code != HttpURLConnection.HTTP_OK) {
-                Logger.warning(LOG_TAG, "GET /api/downloads 返回 HTTP $code")
+                Logger.warning(LOG_TAG, "GET $base/api/downloads 返回 HTTP $code")
                 return null
             }
             val body = conn.inputStream.bufferedReader().use { it.readText() }
-            parse(body)
+            parseAll(body)
+        } catch (e: Exception) {
+            Logger.warning(LOG_TAG, "GET $base/api/downloads 失败：${e.javaClass.simpleName}: ${e.message}")
+            null
         } finally {
             runCatching { conn?.disconnect() }
         }
     }
 
-    /** 从响应里挑出 123 云盘那条；`pan123` 为 null 时按名字再兜一次。 */
-    private fun parse(body: String): Source? {
+    /** 解析全部条目：老的 `pan123` 单条 + 新的 `items` 列表都认，按 url 去重。 */
+    private fun parseAll(body: String): List<Source> {
         val root = JSONObject(body)
-        root.optJSONObject("pan123")?.let { return toSource(it) }
-        val items = root.optJSONArray("items") ?: return null
-        for (i in 0 until items.length()) {
-            val obj = items.optJSONObject(i) ?: continue
-            val src = toSource(obj) ?: continue
-            if (src.key == "123pan" || src.name.contains("123")) return src
+        val out = mutableListOf<Source>()
+        root.optJSONObject("pan123")?.let { toSource(it)?.let(out::add) }
+        val items = root.optJSONArray("items")
+        if (items != null) {
+            for (i in 0 until items.length()) {
+                items.optJSONObject(i)?.let { toSource(it)?.let(out::add) }
+            }
         }
-        return null
+        return out.distinctBy { it.url }
     }
 
     private fun toSource(obj: JSONObject): Source? {
         val url = obj.optString("url").trim()
         if (url.isEmpty()) return null
-        val name = obj.optString("name").trim().ifEmpty { "123 云盘" }
+        val name = obj.optString("name").trim().ifEmpty { "网盘" }
         val key = obj.optString("key").trim()
         return Source(key = key, name = name, url = url)
     }
 
-    private fun readDisk(): Source? = runCatching {
-        val raw = launcherMMKV().getString(KEY_CACHE, "").orEmpty()
-        if (raw.isBlank()) return@runCatching null
-        val obj = JSONObject(raw)
-        Source(
-            key = obj.optString("key"),
-            name = obj.optString("name").ifEmpty { "123 云盘" },
-            url = obj.optString("url"),
-        ).takeIf { it.url.isNotBlank() }
-    }.getOrNull()
+    /** 是不是「网盘」类入口（更新框上那个按钮只认这一类）。 */
+    private fun Source.isCloudPan(): Boolean =
+        key == "123pan" || name.contains("123") || url.contains("123pan", ignoreCase = true)
 
-    private fun writeDisk(src: Source) {
+    private fun readDisk(): List<Source> = runCatching {
+        val raw = launcherMMKV().getString(KEY_CACHE, "").orEmpty()
+        if (raw.isBlank()) return@runCatching emptyList()
+        val arr = org.json.JSONArray(raw)
+        buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                toSource(obj)?.let(::add)
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    private fun writeDisk(list: List<Source>) {
         runCatching {
-            launcherMMKV().putString(
-                KEY_CACHE,
-                JSONObject()
-                    .put("key", src.key)
-                    .put("name", src.name)
-                    .put("url", src.url)
-                    .toString(),
-            )
+            val arr = org.json.JSONArray()
+            list.forEach { src ->
+                arr.put(
+                    JSONObject()
+                        .put("key", src.key)
+                        .put("name", src.name)
+                        .put("url", src.url),
+                )
+            }
+            launcherMMKV().putString(KEY_CACHE, arr.toString())
         }
     }
 }
