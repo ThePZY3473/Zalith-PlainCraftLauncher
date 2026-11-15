@@ -283,8 +283,18 @@ private suspend fun expand(
             val required = dependencies.filter { it.type == PlatformDependencyType.REQUIRED }
             if (required.isEmpty()) return@forEach
 
+            // 同一个前置项目可能被列多遍：Modrinth 给 Iris → Sodium 就返回了 5 条，
+            // 各自指向不同的 version_id。不去重的话这里会展开出 5 个子请求，
+            // registerDownload 又是按「平台/版本」建组的，最后会往 mods 目录里放
+            // 5 个不同版本的 Sodium，启动时互相冲突（用户看到的是「装完没效果」或直接崩）。
+            //
+            // 按项目去重，保留第一条带具体版本的 —— 与界面上「必要前置资源」的口径一致。
+            val uniqueRequired = required
+                .groupBy { "${it.platform}|${it.projectId ?: it.versionId}" }
+                .mapNotNull { (_, deps) -> deps.firstOrNull { it.versionId != null } ?: deps.firstOrNull() }
+
             coroutineScope {
-                required.forEach { dependency ->
+                uniqueRequired.forEach { dependency ->
                     val child = context.expandChild(dependency, request) ?: return@forEach
                     async { expand(child, group, context) }
                 }

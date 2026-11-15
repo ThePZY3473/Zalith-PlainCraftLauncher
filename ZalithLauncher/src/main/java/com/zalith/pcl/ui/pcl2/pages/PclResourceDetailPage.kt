@@ -523,16 +523,26 @@ private fun PclResourceDetail(
                     ) {
                         // 同一个游戏版本下的多个文件通常共用同一组前置（同一个 Mod 的不同构建），
                         // 以前每个文件都跟一块「必要前置资源」，一页里能重复十几遍。
-                        // 这里按平台 + 项目 + 适配版本去重，每个版本卡片只画一次。
+                        // 这里按平台 + 项目去重，每个版本卡片只画一次。
+                        //
+                        // 【为什么去重键里不能带 versionId】
+                        // Modrinth 对同一个前置项目会给多条依赖 —— Iris 的 Sodium 就有 5 条，
+                        // 各自指向不同的 version_id。以前键是「平台|项目|版本」，版本不同就等于
+                        // 「不同前置」，于是五条全留下，页面上就是五张一模一样的 Sodium 卡，
+                        // 标题还写着「必要前置资源（5）」。
+                        // 「必要前置」要回答的是「需要装哪些项目」，一个项目只该出现一次。
                         val versionDeps = remember(list) {
-                            val seen = HashSet<String>()
                             list.flatMap { file ->
                                 file.platformDependencies().filter {
                                     it.type == PlatformDependencyType.REQUIRED && it.projectId != null
                                 }
-                            }.filter { dep ->
-                                seen.add("${dep.platform}|${dep.projectId}|${dep.versionId}")
                             }
+                                .groupBy { "${it.platform}|${it.projectId}" }
+                                .mapNotNull { (_, deps) ->
+                                    // 优先留带 versionId 的那条：后面按它查项目名/图标时，
+                                    // 少一次「只有项目 id、得反查版本」的请求。
+                                    deps.firstOrNull { it.versionId != null } ?: deps.firstOrNull()
+                                }
                         }
                         if (versionDeps.isNotEmpty()) {
                             PclRequiredDependencyBlock(
