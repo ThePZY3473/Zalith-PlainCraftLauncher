@@ -66,7 +66,11 @@ class JvmService : Service() {
         val jreName = intent.extras?.getString(SERVICE_JRE_NAME)
         val userHome = intent.extras?.getString(SERVICE_USER_HOME)
         val postSummary = intent.extras?.getString(SERVICE_POST_SUMMARY)
-        val postProgress = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // 阈值是 34 不是 33：带 Class 的 getParcelable 在 Android 13 上会踩框架 bug
+        // （b/232589966），在 Parcel 里对 null 调 Class.isInterface()。
+        // 这个服务同样是被 startService 拉起的独立进程，属于跨进程读 Parcelable，
+        // 与 VMActivity 读 LaunchConfig 是同一类场景。详见 utils/Bundles.kt。
+        val postProgress = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             intent.extras?.getParcelable(SERVICE_POST_PROGRESS, NoticeProgress::class.java)
         } else {
             @Suppress("DEPRECATION")
