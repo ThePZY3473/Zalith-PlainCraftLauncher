@@ -77,7 +77,7 @@ import com.zalith.pcl.game.download.assets.platform.getVersions
 import com.zalith.pcl.ui.screens.content.download.assets.elements.initAll
 import com.zalith.pcl.game.download.assets.utils.ModTranslations
 import com.zalith.pcl.game.download.assets.utils.getMcmodTitle
-import com.zalith.pcl.game.download.assets.utils.getTranslations
+import com.zalith.pcl.game.download.assets.utils.getMcmodTranslations
 import com.zalith.pcl.game.download.modpack.install.ModpackImporter
 import com.zalith.pcl.ui.pcl2.PclContent
 import com.zalith.pcl.ui.pcl2.PclHintHost
@@ -412,7 +412,7 @@ private fun PclResourceDetail(
                 // 而 class/248 = 矿物追踪）。以前这里写死了 `class/`，于是整合包详情
                 // 点「转到 MC 百科」全都会跳到同号的某个 Mod 上。
                 mcmod?.let { m ->
-                    val mcmodUrl = classes.getTranslations().getMcmodUrl(m)
+                    val mcmodUrl = classes.getMcmodTranslations().getMcmodUrl(m)
                     if (mcmodUrl.isNotBlank()) {
                         PclButton(
                             text = "转到 MC 百科",

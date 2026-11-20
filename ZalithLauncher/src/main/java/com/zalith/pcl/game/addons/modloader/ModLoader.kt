@@ -35,6 +35,7 @@ enum class ModLoader(
     FORGE(displayName = "Forge"),
     NEOFORGE(displayName = "NeoForge"),
 
+    CLEANROOM(displayName = "Cleanroom"),
     FABRIC(displayName = "Fabric"),
     FABRIC_API(displayName = "Fabric API", isLoader = false, isApiMod = true, autoDownloadable = false),
 

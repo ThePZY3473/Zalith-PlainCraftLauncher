@@ -33,6 +33,15 @@
 
 package com.zalith.pcl.ui.pcl2.components
 
+import androidx.compose.ui.res.stringResource
+import com.zalith.pcl.game.renderer.config.ConfigEntryState
+import com.zalith.pcl.game.renderer.config.ConfigScalar
+import com.zalith.pcl.game.renderer.config.ConfigText
+import com.zalith.pcl.game.renderer.config.NumberEntry
+import com.zalith.pcl.game.renderer.config.OrderedChoiceEntry
+import com.zalith.pcl.game.renderer.config.SingleChoiceEntry
+import com.zalith.pcl.game.renderer.config.SwitchEntry
+import com.zalith.pcl.game.renderer.config.TextEntry
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -82,7 +91,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.zalith.pcl.game.plugin.renderer_v2.data.EnvSettingUnit
 import com.zalith.pcl.ui.pcl2.theme.LocalPclBackdrop
 import com.zalith.pcl.ui.pcl2.theme.LocalPclScreenOffset
 import com.zalith.pcl.ui.pcl2.theme.LocalPclUiTheme
@@ -1283,19 +1291,17 @@ fun PclUpgradeDownloadDialog(
 /**
  * 「渲染器配置」弹窗（PCL 风格）。
  *
- * 原生界面在「设置 → 渲染设置 → 全局渲染器」右侧有一枚齿轮，点开就是这个配置
- * （`RendererV2ConfigDialog`）。PCL 界面此前没有入口 —— 用户装了 MobileGlues 这类
- * 新一代渲染器插件后，MOBILEGL_BACKEND_TYPE 之类的开关在 PCL 界面里完全够不着。
+ * 上游 2.8 把渲染器配置从「环境变量单元」换成了声明式的 `RendererConfigSpec`
+ * + `RendererConfigSession`（本地覆盖 / 全局配置 / 规范默认值 三级解析）。
+ * 这里直接渲染会话里的 `ConfigEntryState`：开关、单选、有序多选、数字、文本
+ * 五种条目按类型给控件，改完立刻通过 `saveValue()` 落到存储里。
  *
- * 三类配置项按插件给的 [EnvSettingUnit] 原样渲染：
- *   · `Selectable`   —— 可选勾选 + 下拉选值（`MOBILEGL_BACKEND_TYPE`）
- *   · `Toggleable`   —— 开关（`MOBILEGL_DISABLE_TIMERQUERY`，开 = 写入 envValue）
- *   · `Customizable` —— 文本框（自由填写）
- * 变量名用等宽思路单行显示、超长省略；摘要走灰色小字，和 PCL 的说明行一致。
+ * 传进来的是 `states` 而不是会话本身：弹窗只在组合期读状态，
+ * 会话的生命周期由调用方（设置页）按当前渲染器持有。
  */
 @Composable
 fun PclRendererConfigDialog(
-    units: List<EnvSettingUnit>,
+    states: List<ConfigEntryState>,
     onDismiss: () -> Unit,
 ) {
     val p = pclPalette
@@ -1318,19 +1324,18 @@ fun PclRendererConfigDialog(
                     .heightIn(max = 300.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
-                if (units.isEmpty()) {
+                if (states.isEmpty()) {
                     Text(
-                        text = "当前渲染器没有可配置的环境变量。",
+                        text = "当前渲染器没有可配置的项。",
                         style = PclTextStyle.base(p).copy(
                             fontSize = PclDimens.msgBodyFontSize.sp,
                             color = MsgBodyColor,
                         ),
                     )
                 }
-                units.forEachIndexed { index, unit ->
+                states.forEachIndexed { index, state ->
                     if (index > 0) {
                         Spacer(Modifier.height(14.dp))
-                        // 分隔线：PCL 里同一张卡片内的条目之间就靠一条淡线分开
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1339,106 +1344,149 @@ fun PclRendererConfigDialog(
                         )
                         Spacer(Modifier.height(14.dp))
                     }
-                    when (unit) {
-                        is EnvSettingUnit.Selectable -> PclSelectableEnvItem(unit)
-                        is EnvSettingUnit.Toggleable -> PclToggleableEnvItem(unit)
-                        is EnvSettingUnit.Customizable -> PclCustomizableEnvItem(unit)
-                    }
+                    PclConfigEntryItem(state)
                 }
             }
         }
     }
 }
 
-/** 环境变量名：`环境变量：MOBILEGL_BACKEND_TYPE`。 */
+/** 解析配置项标题/说明：上游用 [ConfigText] 表示「资源字符串」或「插件给的动态文本」。 */
 @Composable
-private fun PclEnvKeyText(key: String) {
+private fun ConfigText.resolveText(): String = when (this) {
+    is ConfigText.Resource -> stringResource(resId)
+    is ConfigText.Dynamic -> value
+}
+
+@Composable
+private fun PclConfigEntryItem(state: ConfigEntryState) {
+    val p = pclPalette
+    val entry = state.entry
+    val title = entry.title?.resolveText() ?: entry.id
+    val desc = entry.description?.resolveText()
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        when (entry) {
+            is SwitchEntry -> PclSwitchItem(
+                title = title,
+                checked = (state.value as? ConfigScalar.BooleanValue)?.value == true,
+                description = desc,
+                modifier = Modifier.fillMaxWidth(),
+                onCheckedChange = { state.saveValue(ConfigScalar.BooleanValue(it)) },
+            )
+
+            is SingleChoiceEntry -> {
+                PclConfigEntryHeader(title, desc, entry.id)
+                Spacer(Modifier.height(6.dp))
+                val current = state.value.asString()
+                // 先把「显示文字 -> 值」的映射在组合期算好，lambda 里不能再调 @Composable
+                val optionLabels = entry.options.map { it.label?.resolveText() ?: it.value.asString() }
+                val optionValues = entry.options.map { it.value }
+                val selectedIndex = entry.options.indexOfFirst { it.value.asString() == current }
+                PclComboBox(
+                    items = optionLabels,
+                    selected = optionLabels.getOrNull(selectedIndex),
+                    modifier = Modifier.fillMaxWidth(),
+                    onSelect = { picked ->
+                        val i = optionLabels.indexOf(picked)
+                        if (i >= 0) state.saveValue(optionValues[i])
+                    },
+                )
+            }
+
+            is OrderedChoiceEntry -> {
+                // 有序多选在 PCL 的窗体里也是文本框最直观：值本身就是逗号分隔的列表
+                PclConfigEntryHeader(title, desc, entry.id)
+                Spacer(Modifier.height(6.dp))
+                var text by remember(state) { mutableStateOf(state.value.asString()) }
+                PclTextBox(
+                    value = text,
+                    modifier = Modifier.fillMaxWidth(),
+                    hint = entry.options.joinToString(",") { it.value.asString() },
+                    onValueChange = {
+                        text = it
+                        state.saveValue(ConfigScalar.StringValue(it))
+                    },
+                )
+            }
+
+            is NumberEntry -> {
+                PclConfigEntryHeader(title, desc, entry.id)
+                Spacer(Modifier.height(6.dp))
+                var text by remember(state) { mutableStateOf(state.value.asString()) }
+                PclTextBox(
+                    value = text,
+                    modifier = Modifier.fillMaxWidth(),
+                    hint = entry.defaultValue.asString(),
+                    onValueChange = {
+                        text = it
+                        state.saveValue(ConfigScalar.StringValue(it))
+                    },
+                )
+            }
+
+            is TextEntry -> {
+                PclConfigEntryHeader(title, desc, entry.id)
+                Spacer(Modifier.height(6.dp))
+                var text by remember(state) { mutableStateOf(state.value.asString()) }
+                PclTextBox(
+                    value = text,
+                    modifier = Modifier.fillMaxWidth(),
+                    hint = entry.defaultValue.asString(),
+                    onValueChange = {
+                        text = it
+                        state.saveValue(ConfigScalar.StringValue(it))
+                    },
+                )
+            }
+
+            else -> {
+                PclConfigEntryHeader(title, desc, entry.id)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = state.value.asString(),
+                    style = PclTextStyle.base(p).copy(
+                        fontSize = PclDimens.msgBodyFontSize.sp,
+                        color = MsgBodyColor,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PclConfigEntryHeader(title: String, description: String?, id: String) {
     val p = pclPalette
     Text(
-        text = "环境变量：$key",
+        text = title,
         style = PclTextStyle.base(p).copy(
             fontSize = PclDimens.msgBodyFontSize.sp,
             color = p.color1,
+        ),
+    )
+    if (!description.isNullOrBlank()) {
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = description,
+            style = PclTextStyle.base(p).copy(
+                fontSize = 12.5.sp,
+                color = p.gray2,
+            ),
+        )
+    }
+    Spacer(Modifier.height(2.dp))
+    Text(
+        text = "配置项：$id",
+        style = PclTextStyle.base(p).copy(
+            fontSize = 11.5.sp,
+            color = p.gray3,
         ),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
 }
 
-/** 插件给的说明（灰色小字）。 */
-@Composable
-private fun PclEnvSummaryText(summary: String?) {
-    if (summary.isNullOrBlank()) return
-    val p = pclPalette
-    Spacer(Modifier.height(3.dp))
-    Text(
-        text = summary,
-        style = PclTextStyle.base(p).copy(
-            fontSize = 12.5.sp,
-            color = p.gray2,
-        ),
-    )
-}
-
-@Composable
-private fun PclSelectableEnvItem(unit: EnvSettingUnit.Selectable) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (unit.rawEnv.check != null) {
-            // 插件声明了 check：可以整体关掉这条环境变量
-            PclCheckBox(
-                text = "环境变量：${unit.rawEnv.key}",
-                checked = unit.isEnabled,
-                modifier = Modifier.fillMaxWidth(),
-                onCheckedChange = { unit.saveCheck(it) },
-            )
-        } else {
-            PclEnvKeyText(unit.rawEnv.key)
-        }
-        PclEnvSummaryText(unit.summary)
-        Spacer(Modifier.height(6.dp))
-        PclComboBox(
-            items = unit.values,
-            selected = unit.state,
-            // 关掉的时候下拉置灰，避免「关了还能改」的困惑
-            enabled = unit.isEnabled,
-            modifier = Modifier.fillMaxWidth(),
-            label = { it.orEmpty() },
-            onSelect = { if (it != unit.state) unit.save(it) },
-        )
-    }
-}
-
-@Composable
-private fun PclToggleableEnvItem(unit: EnvSettingUnit.Toggleable) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        PclSwitchItem(
-            title = "环境变量：${unit.rawEnv.key}",
-            checked = unit.isEnabled,
-            description = unit.summary,
-            modifier = Modifier.fillMaxWidth(),
-            onCheckedChange = { checked -> unit.save(if (checked) unit.envValue else "") },
-        )
-    }
-}
-
-@Composable
-private fun PclCustomizableEnvItem(unit: EnvSettingUnit.Customizable) {
-    var text by remember(unit) { mutableStateOf(unit.state) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        PclEnvKeyText(unit.rawEnv.key)
-        PclEnvSummaryText(unit.summary)
-        Spacer(Modifier.height(6.dp))
-        PclTextBox(
-            value = text,
-            modifier = Modifier.fillMaxWidth(),
-            hint = unit.defaultValue.ifEmpty { "留空表示不设置" },
-            onValueChange = {
-                text = it
-                unit.save(it)
-            },
-        )
-    }
-}
 
 /* ============================================================================
  *  启动器更新：选择下载源

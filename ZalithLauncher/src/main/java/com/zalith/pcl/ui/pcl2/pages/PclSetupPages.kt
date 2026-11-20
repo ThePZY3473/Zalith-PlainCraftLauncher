@@ -100,6 +100,8 @@ import com.zalith.pcl.ui.pcl2.components.PclHint
 import com.zalith.pcl.ui.pcl2.components.PclHintTheme
 import com.zalith.pcl.ui.pcl2.components.PclIcons
 import com.zalith.pcl.ui.pcl2.components.PclIconButton
+import com.zalith.pcl.game.renderer.config.GlobalRendererConfigStore
+import com.zalith.pcl.game.renderer.config.RendererConfigSession
 import com.zalith.pcl.ui.pcl2.components.PclRendererConfigDialog
 import com.zalith.pcl.ui.pcl2.components.PclImageLoader
 import com.zalith.pcl.ui.pcl2.components.PclRadioBox
@@ -353,14 +355,21 @@ private fun PclRenderingCard() {
     // 原生界面在「全局渲染器」右侧有枚齿轮，点开就是 `RendererV2ConfigDialog`；
     // PCL 界面之前完全没有这个入口，装了插件也够不着 MOBILEGL_BACKEND_TYPE 之类的开关。
     val currentRendererId = AllSettings.renderer.state
-    val rendererEnvUnits = remember(currentRendererId) {
+    // 上游 2.8 起，渲染器配置是声明式的 `RendererConfigSpec`，由
+    // `RendererConfigSession` 统一管理「本地覆盖 / 全局配置 / 规范默认值」三级解析。
+    // 这里按当前渲染器建一个会话，弹窗直接渲染它的 states。
+    val rendererConfigSession = remember(currentRendererId) {
         runCatching {
-            Renderers.getRenderers()
+            val data = Renderers.getRenderers()
                 .filterIsInstance<RendererV2Data>()
                 .firstOrNull { it.getUniqueIdentifier() == currentRendererId }
-                ?.env
-                ?.getConfigurableUnits()
-                ?.takeIf { it.isNotEmpty() }
+                ?: return@runCatching null
+            if (data.configSpec.entries.isEmpty()) return@runCatching null
+            RendererConfigSession(
+                rendererId = data.getUniqueIdentifier(),
+                spec = data.configSpec,
+                localStore = GlobalRendererConfigStore,
+            )
         }.getOrNull()
     }
     var showRendererConfig by remember { mutableStateOf(false) }
@@ -389,7 +398,7 @@ private fun PclRenderingCard() {
                         },
                     )
                     // 只有「选中新一代渲染器插件 + 它确实有可配置项」时才出现，和原生一致
-                    if (rendererEnvUnits != null) {
+                    if (rendererConfigSession != null) {
                         Spacer(Modifier.width(10.dp))
                         PclIconButton(
                             logo = PclIcons.setupGear,
@@ -505,11 +514,13 @@ private fun PclRenderingCard() {
 
     // 渲染器配置弹窗（环境变量）。放在卡片外层：`PclDialogContainer` 自带 Dialog 层级，
     // 塞进 `Column` 里也不会被卡片裁剪，但放外层更清楚。
-    if (showRendererConfig && rendererEnvUnits != null) {
-        PclRendererConfigDialog(
-            units = rendererEnvUnits,
-            onDismiss = { showRendererConfig = false },
-        )
+    if (showRendererConfig) {
+        rendererConfigSession?.let { session ->
+            PclRendererConfigDialog(
+                states = session.states,
+                onDismiss = { showRendererConfig = false },
+            )
+        }
     }
 }
 

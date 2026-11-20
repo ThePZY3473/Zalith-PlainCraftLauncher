@@ -37,6 +37,7 @@ import com.zalith.pcl.BuildKeys
 import com.zalith.pcl.game.download.assets.platform.Platform
 import com.zalith.pcl.game.path.GamePathManager
 import com.zalith.pcl.game.version.installed.GraphicsApi
+import com.zalith.pcl.setting.enums.MouseTouchBlockMode
 import com.zalith.pcl.setting.enums.ActionMenuSide
 import com.zalith.pcl.setting.enums.AppLanguage
 import com.zalith.pcl.setting.enums.BackgroundBlur
@@ -455,6 +456,17 @@ object AllSettings : SettingsRegistry() {
      * 启动器页面切换动画类型
      */
     val launcherSwapAnimateType = enumSetting("launcherSwapAnimateType", TransitionAnimationType.JELLY_BOUNCE)
+    /** PCL 界面的切换动画总开关（上游 2.8 新增，我们的分支原先只有动画类型）。 */
+    val sfpewPluginLayer = boolSetting("sfpewPluginLayer", false)
+    val sfpewRelaxedContext = boolSetting("sfpewRelaxedContext", false)
+    val requestMaxRefreshRate = boolSetting("requestMaxRefreshRate", true)
+    val mouseTouchBlockMode = enumSetting("mouseTouchBlockMode", MouseTouchBlockMode.NONE)
+    val imeMagnifierAutoShow = boolSetting("imeMagnifierAutoShow", true)
+    val launcherSwapAnimEnabled = boolSetting("launcherSwapAnimEnabled", true)
+    /** 切换动画速度档位（1..30，10 为默认）。 */
+    val launcherAnimateSpeedLevel = intSetting("launcherAnimateSpeedLevel", 10, 1..30)
+    /** 赞助者报告上次展示的月份（上游 2.8 新增）。 */
+    val lastSponsorReportMonth = stringSetting("lastSponsorReportMonth", "")
 
     /**
      * 主界面操作菜单的停泊侧

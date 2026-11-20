@@ -3092,4 +3092,19 @@
     <string name="pcl_export_alias_options">游戏本体设置</string>
     <string name="pcl_export_alias_launcher">PCL 启动器配置</string>
     <string name="game_renderer_auto_compat">Detected %1$s, which requires desktop OpenGL 3.3+. The current renderer cannot handle it, so %2$s was selected automatically for this launch.</string>
+    <string name="animate_type_bounce">Bounce</string>
+    <string name="animate_type_jelly_bounce">Jelly Bounce</string>
+    <string name="animate_type_slice_in">Slice In</string>
+    <string name="account_local_uuid_copied">Copied UUID of Account %s</string>
+    <string name="versions_export_type_multimc">MultiMC Modpack</string>
+    <string name="versions_export_type_multimc_summary">Can be imported by %s, MultiMC, and other launchers</string>
+    <string name="versions_export_pack_max_memory">Maximum Allocated Memory</string>
+    <string name="screenshots_manage_export_success">Export completed</string>
+    <string name="settings_renderer_env_title">Environment Variable: %s</string>
+    <string name="settings_renderer_surface_title">Use SurfaceView Rendering</string>
+    <string name="settings_renderer_surface_summary">Renders using a separate layer outside the UI</string>
+    <string name="settings_launcher_animate_extent_title">Animation Intensity</string>
+    <string name="settings_launcher_animate_extent_summary">Adjust the intensity of the launcher animations</string>
+    <string name="settings_launcher_swap_animate_type_title">Transition Animation</string>
+    <string name="settings_launcher_swap_animate_type_summary">Choose the page transition animation that best suits your preferences</string>
 </resources>
