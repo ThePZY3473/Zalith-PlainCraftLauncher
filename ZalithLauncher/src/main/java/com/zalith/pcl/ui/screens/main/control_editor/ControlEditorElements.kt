@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,7 +36,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,13 +62,7 @@ import com.movtery.guide.guideNode
 import com.movtery.layer_controller.data.HideLayerWhen
 import com.movtery.layer_controller.data.JoystickTriggerMode
 import com.movtery.layer_controller.data.VisibilityType
-import com.movtery.layer_controller.event.ClickEvent
-import com.movtery.layer_controller.observable.ObservableButtonStyle
-import com.movtery.layer_controller.observable.ObservableClickEventsProvider
 import com.movtery.layer_controller.observable.ObservableControlLayer
-import com.movtery.layer_controller.observable.ObservableJoystickStyle
-import com.movtery.layer_controller.observable.ObservableTranslatableString
-import com.movtery.layer_controller.observable.ObservableWidget
 import com.movtery.layer_controller.utils.snap.SnapMode
 import com.zalith.pcl.R
 import com.zalith.pcl.bridge.CURSOR_DISABLED
@@ -85,83 +78,11 @@ import com.zalith.pcl.ui.components.MenuTextButton
 import com.zalith.pcl.ui.components.ScalingActionButton
 import com.zalith.pcl.ui.components.lazyScrollWithBar
 import com.zalith.pcl.ui.guide.GuideKeys
-import com.zalith.pcl.ui.pcl2.components.PclButton
-import com.zalith.pcl.ui.pcl2.components.PclColorState
-import com.zalith.pcl.ui.pcl2.components.PclMenuCheckRow
-import com.zalith.pcl.ui.pcl2.components.PclMenuComboRow
-import com.zalith.pcl.ui.pcl2.components.PclMenuRow
-import com.zalith.pcl.ui.pcl2.components.PclPainterIconButton
-import com.zalith.pcl.ui.pcl2.editor.PclEditorMenuPanels
-import com.zalith.pcl.ui.pcl2.editor.PclLayerRow
-import com.zalith.pcl.ui.pcl2.theme.LocalPclPalette
 import com.zalith.pcl.ui.theme.cardColor
 import com.zalith.pcl.ui.theme.onCardColor
+import com.zalith.pcl.utils.string.isNotEmptyOrBlank
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
-
-/**
- * 控制布局编辑器操作状态
- */
-sealed interface EditorOperation {
-    data object None : EditorOperation
-    /** 选择了一个控件进行编辑 */
-    data object SelectButton : EditorOperation
-    /** 编辑控件层属性 */
-    data class EditLayer(val layer: ObservableControlLayer) : EditorOperation
-    /** 删除控件层 */
-    data class DeleteLayer(val layer: ObservableControlLayer) : EditorOperation
-    /** 打开控件外观列表 */
-    data object OpenStyleList : EditorOperation
-    /** 创建控件外观 */
-    data object CreateStyle : EditorOperation
-    /** 编辑控件外观 */
-    data object EditButtonStyle : EditorOperation
-    /** 删除控件外观 */
-    data class DeleteButtonStyle(val style: ObservableButtonStyle) : EditorOperation
-    /** 编辑摇杆样式 */
-    data object EditJoystickStyle : EditorOperation
-    /** 删除摇杆样式 */
-    data class DeleteJoystickStyle(val style: ObservableJoystickStyle) : EditorOperation
-    /** 打开摇杆样式列表 */
-    data object OpenJoystickStyleList : EditorOperation
-    /** 创建摇杆样式 */
-    data object CreateJoystickStyle : EditorOperation
-    /** 控制布局正在保存中 */
-    data object Saving : EditorOperation
-    /** 控制布局保存失败 */
-    data class SaveFailed(val error: Throwable) : EditorOperation
-}
-
-/**
- * 控制布局编辑器对控件的操作状态
- */
-sealed interface EditorWidgetOperation {
-    data object None : EditorWidgetOperation
-    /** 选择了一个控件, 并询问用户将其复制到哪些控制层 */
-    data class CloneButton(val data: ObservableWidget, val layer: ObservableControlLayer) : EditorWidgetOperation
-    /** 删除一个控件 */
-    data class DeleteButton(val data: ObservableWidget, val layer: ObservableControlLayer) : EditorWidgetOperation
-    /** 编辑控件的显示文本 */
-    data class EditWidgetText(val string: ObservableTranslatableString) : EditorWidgetOperation
-    /** 编辑切换控件层可见性事件 */
-    data class SwitchLayersVisibility(
-        val data: ObservableClickEventsProvider,
-        val type: ClickEvent.Type
-    ) : EditorWidgetOperation
-    /** 编辑发送的文本 */
-    data class SendText(val data: ObservableClickEventsProvider) : EditorWidgetOperation
-}
-
-/**
- * 控制布局编辑器的一些警告的操作状态
- */
-sealed interface EditorWarningOperation {
-    data object None : EditorWarningOperation
-    /** 没有控件层，提醒用户添加 */
-    data object WarningNoLayers : EditorWarningOperation
-    /** 没有选择控件层，提醒用户选择 */
-    data object WarningNoSelectLayer : EditorWarningOperation
-}
 
 /**
  * 预览控制布局的场景
@@ -194,6 +115,14 @@ fun JoystickTriggerMode.getTriggerModeText(): String {
     return stringResource(textRes)
 }
 
+/**
+ * 文本为空或全空白时，回退显示为“未指定”
+ */
+@Composable
+fun String.orUnspecified(): String {
+    return takeIf { it.isNotEmptyOrBlank() } ?: stringResource(R.string.generic_unspecified)
+}
+
 @Composable
 fun MenuBox(
     modifier: Modifier = Modifier,
@@ -202,17 +131,11 @@ fun MenuBox(
     opened: Boolean,
     onClick: () -> Unit
 ) {
-    // 悬浮球的配色也统一到 PCL：`ColorBrush3` 蓝底 + 白图标，圆角用 PCL 的按钮圆角（3）。
-    // 原生默认是「黑 25% 底 + 白图标」，在一张全白的 PCL 界面里像另一套设计。
-    val p = LocalPclPalette.current
     FloatingBall(
         modifier = modifier,
         position = position,
         onPositionChanged = onPositionChanged,
-        onClick = onClick,
-        color = p.color3,
-        contentColor = p.color8,
-        shape = RoundedCornerShape(3.dp)
+        onClick = onClick
     ) {
         Box(
             modifier = Modifier
@@ -253,6 +176,7 @@ fun EditorMenu(
     addNewJoystick: () -> Unit,
     openStyleList: () -> Unit,
     openJoystickStyleList: () -> Unit,
+    openStyleCabinet: () -> Unit,
     isLayerFocus: Boolean,
     onLayerFocusChanged: (Boolean) -> Unit,
     isPreviewMode: Boolean,
@@ -265,11 +189,17 @@ fun EditorMenu(
     saveAndExit: () -> Unit,
     onExit: () -> Unit
 ) {
-    PclEditorMenuPanels(
-        visible = state == MenuState.SHOW,
-        onClose = closeScreen,
-        leftTitle = stringResource(R.string.control_editor_menu_title),
-        leftContent = {
+    DualMenuSubscreen(
+        state = state,
+        closeScreen = closeScreen,
+        leftMenuTitle = {
+            Text(
+                modifier = Modifier.padding(all = 8.dp),
+                text = stringResource(R.string.control_editor_menu_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
+        leftMenuContent = {
             EditorMenuContent(
                 modifier = Modifier.weight(1f),
                 closeScreen = closeScreen,
@@ -278,6 +208,7 @@ fun EditorMenu(
                 addNewJoystick = addNewJoystick,
                 openStyleList = openStyleList,
                 openJoystickStyleList = openJoystickStyleList,
+                openStyleCabinet = openStyleCabinet,
                 isPreviewMode = isPreviewMode,
                 onPreviewChanged = onPreviewChanged,
                 previewScenario = previewScenario,
@@ -289,25 +220,37 @@ fun EditorMenu(
                 onExit = onExit
             )
         },
-        rightTitle = stringResource(R.string.control_editor_layers_title),
-        rightTitleAccessory = {
+        rightMenuTitle = {
+            Text(
+                modifier = Modifier.padding(all = 8.dp),
+                text = stringResource(R.string.control_editor_layers_title),
+                style = MaterialTheme.typography.titleMedium
+            )
             //切换控件层聚焦
-            PclPainterIconButton(
-                modifier = Modifier.padding(top = 6.dp, end = 8.dp),
-                painter = painterResource(
-                    if (isLayerFocus) {
-                        R.drawable.ic_center_focus_strong_filled
-                    } else {
-                        R.drawable.ic_center_focus_strong_outlined
-                    }
-                ),
-                enabled = isPreviewMode.not() && selectedLayer != null,
+            IconButton(
+                modifier = Modifier.align(Alignment.CenterEnd),
                 onClick = {
                     onLayerFocusChanged(isLayerFocus.not())
+                },
+                enabled = isPreviewMode.not() && selectedLayer != null
+            ) {
+                Crossfade(
+                    targetState = isLayerFocus
+                ) { isFocus ->
+                    Icon(
+                        painter = painterResource(
+                            if (isFocus) {
+                                R.drawable.ic_center_focus_strong_filled
+                            } else {
+                                R.drawable.ic_center_focus_strong_outlined
+                            }
+                        ),
+                        contentDescription = null
+                    )
                 }
-            )
+            }
         },
-        rightContent = {
+        rightMenuContent = {
             ControlLayerMenu(
                 layers = layers,
                 onReorder = onReorder,
@@ -330,6 +273,7 @@ private fun EditorMenuContent(
     addNewJoystick: () -> Unit,
     openStyleList: () -> Unit,
     openJoystickStyleList: () -> Unit,
+    openStyleCabinet: () -> Unit,
     isPreviewMode: Boolean,
     onPreviewChanged: (Boolean) -> Unit,
     previewScenario: PreviewScenario,
@@ -340,18 +284,9 @@ private fun EditorMenuContent(
     saveAndExit: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    color: Color = cardColor(false),
+    contentColor: Color = onCardColor()
 ) {
-    // `stringResource` 是 @Composable，塞不进 `labelOf` 这种普通 lambda，先在组合里把标签算好
-    val scenarioLabels = PreviewScenario.entries.associateWith { stringResource(it.textRes) }
-    val snapModeLabels = SnapMode.entries.associateWith { mode ->
-        stringResource(
-            when (mode) {
-                SnapMode.FullScreen -> R.string.control_editor_menu_widget_snap_mode_fullscreen
-                SnapMode.Local -> R.string.control_editor_menu_widget_snap_mode_local
-            }
-        )
-    }
-
     val listState = rememberLazyListState()
     LazyColumn(
         modifier = modifier
@@ -359,6 +294,7 @@ private fun EditorMenuContent(
                 when (key) {
                     GuideKeys.Editor.Step.CreateLayer -> "add_button"
                     GuideKeys.Editor.Step.AddStyles -> "joystick_style_list"
+                    GuideKeys.Editor.Step.StyleCabinet -> "style_cabinet"
                     GuideKeys.Editor.Step.Preview -> "using_gamepad"
                     GuideKeys.Editor.Step.Save -> "save_and_exit"
                     else -> null
@@ -366,57 +302,67 @@ private fun EditorMenuContent(
             }
             .lazyScrollWithBar(listState),
         state = listState,
-        contentPadding = PaddingValues(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        contentPadding = PaddingValues(all = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         //添加按钮
         item(key = "add_button") {
-            PclMenuRow(
+            MenuTextButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.AddButtons,
                         holeRadius = 16.dp
                     )
                     .fillMaxWidth(),
-                text = stringResource(R.string.control_editor_menu_new_widget_button),
                 enabled = isPreviewMode.not(),
+                text = stringResource(R.string.control_editor_menu_new_widget_button),
                 onClick = addNewButton,
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         //添加文本框
         item(key = "add_textbox") {
-            PclMenuRow(
+            MenuTextButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.AddButtons,
                         holeRadius = 16.dp
                     )
                     .fillMaxWidth(),
-                text = stringResource(R.string.control_editor_menu_new_widget_text),
                 enabled = isPreviewMode.not(),
+                text = stringResource(R.string.control_editor_menu_new_widget_text),
                 onClick = addNewText,
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         //添加摇杆
         item(key = "add_joystick") {
-            PclMenuRow(
+            MenuTextButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.AddButtons,
                         holeRadius = 16.dp
                     )
                     .fillMaxWidth(),
-                text = stringResource(R.string.control_editor_menu_new_widget_joystick),
                 enabled = isPreviewMode.not(),
+                text = stringResource(R.string.control_editor_menu_new_widget_joystick),
                 onClick = addNewJoystick,
+                color = color,
+                contentColor = contentColor,
             )
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
         //控件外观列表
         item(key = "control_appearance_list") {
-            PclMenuRow(
+            MenuTextButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.AddStyles,
@@ -429,12 +375,14 @@ private fun EditorMenuContent(
                     openStyleList()
                     closeScreen()
                 },
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         //摇杆样式列表
         item(key = "joystick_style_list") {
-            PclMenuRow(
+            MenuTextButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.AddStyles,
@@ -447,16 +395,38 @@ private fun EditorMenuContent(
                     openJoystickStyleList()
                     closeScreen()
                 },
+                color = color,
+                contentColor = contentColor,
+            )
+        }
+
+        // 样式收藏柜
+        item(key = "style_cabinet") {
+            MenuTextButton(
+                modifier = Modifier
+                    .guideNode(
+                        key = GuideKeys.Editor.Step.StyleCabinet,
+                        holeRadius = 16.dp
+                    )
+                    .fillMaxWidth(),
+                text = stringResource(R.string.control_editor_style_cabinet),
+                enabled = isPreviewMode.not(),
+                onClick = {
+                    openStyleCabinet()
+                    closeScreen()
+                },
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         item {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
         //预览控制布局
         item(key = "preview_control_layout") {
-            PclMenuCheckRow(
+            MenuSwitchButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.Preview,
@@ -464,32 +434,38 @@ private fun EditorMenuContent(
                     )
                     .fillMaxWidth(),
                 text = stringResource(R.string.control_editor_menu_preview_mode),
-                checked = isPreviewMode,
-                onCheckedChange = { onPreviewChanged(it) },
+                switch = isPreviewMode,
+                onSwitch = { onPreviewChanged(it) },
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         //预览场景
         item(key = "preview_scenario") {
-            PclMenuComboRow(
+            MenuListLayout(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.Preview,
                         holeRadius = 16.dp
                     )
                     .fillMaxWidth(),
-                label = stringResource(R.string.control_editor_menu_preview_mode_scenario),
+                title = stringResource(R.string.control_editor_menu_preview_mode_scenario),
                 items = PreviewScenario.entries,
-                selected = previewScenario,
-                labelOf = { scenarioLabels.getValue(it) },
-                enabled = isPreviewMode,
-                onSelect = onPreviewScenarioChanged,
+                currentItem = previewScenario,
+                onItemChange = onPreviewScenarioChanged,
+                getItemText = { scenario ->
+                    stringResource(scenario.textRes)
+                },
+                color = color,
+                contentColor = contentColor,
+                enabled = isPreviewMode
             )
         }
 
         //正在使用实体鼠标
         item(key = "using_physical_mouse") {
-            PclMenuCheckRow(
+            MenuSwitchButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.Preview,
@@ -497,20 +473,22 @@ private fun EditorMenuContent(
                     )
                     .fillMaxWidth(),
                 text = stringResource(R.string.control_editor_menu_preview_is_mouse),
-                checked = previewHideLayerWhen == HideLayerWhen.WhenMouse,
-                enabled = isPreviewMode,
-                onCheckedChange = { value ->
+                switch = previewHideLayerWhen == HideLayerWhen.WhenMouse,
+                onSwitch = { value ->
                     onPreviewHideLayerChanged(
                         if (value) HideLayerWhen.WhenMouse
                         else HideLayerWhen.None
                     )
                 },
+                color = color,
+                contentColor = contentColor,
+                enabled = isPreviewMode
             )
         }
 
         //正在使用手柄
         item(key = "using_gamepad") {
-            PclMenuCheckRow(
+            MenuSwitchButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.Preview,
@@ -518,60 +496,74 @@ private fun EditorMenuContent(
                     )
                     .fillMaxWidth(),
                 text = stringResource(R.string.control_editor_menu_preview_is_gamepad),
-                checked = previewHideLayerWhen == HideLayerWhen.WhenGamepad,
-                enabled = isPreviewMode,
-                onCheckedChange = { value ->
+                switch = previewHideLayerWhen == HideLayerWhen.WhenGamepad,
+                onSwitch = { value ->
                     onPreviewHideLayerChanged(
                         if (value) HideLayerWhen.WhenGamepad
                         else HideLayerWhen.None
                     )
                 },
+                color = color,
+                contentColor = contentColor,
+                enabled = isPreviewMode
             )
         }
 
         item {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
         //控件吸附
         item {
-            PclMenuCheckRow(
+            MenuSwitchButton(
                 modifier = Modifier.fillMaxWidth(),
                 text = stringResource(R.string.control_editor_menu_widget_snap),
-                checked = AllSettings.editorEnableWidgetSnap.state,
-                onCheckedChange = { AllSettings.editorEnableWidgetSnap.save(it) },
+                switch = AllSettings.editorEnableWidgetSnap.state,
+                onSwitch = { AllSettings.editorEnableWidgetSnap.save(it) },
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         //所有控制层范围吸附
         item {
-            PclMenuCheckRow(
+            MenuSwitchButton(
                 modifier = Modifier.fillMaxWidth(),
                 text = stringResource(R.string.control_editor_menu_widget_snap_all_layers),
-                checked = AllSettings.editorSnapInAllLayers.state,
-                onCheckedChange = { AllSettings.editorSnapInAllLayers.save(it) },
+                switch = AllSettings.editorSnapInAllLayers.state,
+                onSwitch = { AllSettings.editorSnapInAllLayers.save(it) },
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         //控件吸附模式
         item {
-            PclMenuComboRow(
+            MenuListLayout(
                 modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.control_editor_menu_widget_snap_mode),
+                title = stringResource(R.string.control_editor_menu_widget_snap_mode),
                 items = SnapMode.entries,
-                selected = AllSettings.editorWidgetSnapMode.state,
-                labelOf = { snapModeLabels.getValue(it) },
-                onSelect = { AllSettings.editorWidgetSnapMode.save(it) },
+                currentItem = AllSettings.editorWidgetSnapMode.state,
+                onItemChange = { AllSettings.editorWidgetSnapMode.save(it) },
+                getItemText = { mode ->
+                    val textRes = when (mode) {
+                        SnapMode.FullScreen -> R.string.control_editor_menu_widget_snap_mode_fullscreen
+                        SnapMode.Local -> R.string.control_editor_menu_widget_snap_mode_local
+                    }
+                    stringResource(textRes)
+                },
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         item {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
         //保存
         item(key = "save") {
-            PclMenuRow(
+            MenuTextButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.Save,
@@ -580,12 +572,14 @@ private fun EditorMenuContent(
                     .fillMaxWidth(),
                 text = stringResource(R.string.generic_save),
                 onClick = onSave,
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         //保存并退出
         item(key = "save_and_exit") {
-            PclMenuRow(
+            MenuTextButton(
                 modifier = Modifier
                     .guideNode(
                         key = GuideKeys.Editor.Step.Save,
@@ -594,15 +588,19 @@ private fun EditorMenuContent(
                     .fillMaxWidth(),
                 text = stringResource(R.string.control_editor_menu_save_and_exit),
                 onClick = saveAndExit,
+                color = color,
+                contentColor = contentColor,
             )
         }
 
         //直接退出
         item(key = "exit_directly") {
-            PclMenuRow(
+            MenuTextButton(
                 modifier = Modifier.fillMaxWidth(),
                 text = stringResource(R.string.control_editor_exit_confirm),
                 onClick = onExit,
+                color = color,
+                contentColor = contentColor,
             )
         }
     }
@@ -617,6 +615,8 @@ private fun ColumnScope.ControlLayerMenu(
     createLayer: () -> Unit,
     onAttribute: (ObservableControlLayer) -> Unit,
     onHideSwitch: (ObservableControlLayer) -> Unit,
+    color: Color = cardColor(false),
+    contentColor: Color = onCardColor(),
     enabled: Boolean = true
 ) {
     val lazyListState = rememberLazyListState()
@@ -656,20 +656,22 @@ private fun ColumnScope.ControlLayerMenu(
             .weight(1f)
             .lazyScrollWithBar(lazyListState),
         state = lazyListState,
-        contentPadding = PaddingValues(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        contentPadding = PaddingValues(all = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(layers, { it.uuid }) { layer ->
             ReorderableItem(
                 state = reorderableLazyListState,
                 key = layer.uuid,
                 enabled = enabled,
-            ) {
+            ) { isDragging ->
+                val shadowElevation by animateDpAsState(if (isDragging) 4.dp else 0.dp)
                 ControlLayerItem(
                     modifier = Modifier.fillMaxWidth(),
                     layer = layer,
                     dragButtonModifier = Modifier.draggableHandle(),
                     selected = selectedLayer == layer,
+                    shadowElevation = shadowElevation,
                     onSelected = {
                         onLayerSelected(layer)
                     },
@@ -682,30 +684,27 @@ private fun ColumnScope.ControlLayerMenu(
                     onHideSwitch = {
                         onHideSwitch(layer)
                     },
+                    color = color,
+                    contentColor = contentColor,
                     enabled = enabled
                 )
             }
         }
     }
-    //「新建」是这一栏唯一的主动作，用 PCL 的 MyButton（Highlight 配色：深蓝字 + 半透明白底）
-    PclButton(
+    ScalingActionButton(
         modifier = Modifier
             .guideNode(
                 key = GuideKeys.Editor.Step.CreateLayer,
                 holeRadius = 50.dp
             )
-            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
             .fillMaxWidth(),
-        text = stringResource(R.string.control_editor_layers_create),
-        colorState = PclColorState.Highlight,
-        onClick = createLayer,
-    )
+        onClick = createLayer
+    ) {
+        MarqueeText(text = stringResource(R.string.control_editor_layers_create))
+    }
 }
 
-/**
- * 一行控制层 —— 版式已迁到 `PclEditorChrome` 的 [PclLayerRow]（PCL 列表项写法），
- * 这里只负责把 `ObservableControlLayer` 的数据与回调接上去。
- */
 @Composable
 private fun ControlLayerItem(
     modifier: Modifier = Modifier,
@@ -716,19 +715,86 @@ private fun ControlLayerItem(
     onUnSelected: () -> Unit,
     onAttribute: () -> Unit,
     onHideSwitch: () -> Unit,
+    color: Color,
+    contentColor: Color,
+    borderColor: Color = MaterialTheme.colorScheme.primary,
+    shape: Shape = MaterialTheme.shapes.large,
+    shadowElevation: Dp = 0.dp,
     enabled: Boolean = true
 ) {
-    PclLayerRow(
-        modifier = modifier,
-        name = layer.name,
-        selected = selected,
-        hidden = layer.editorHide,
-        enabled = enabled,
-        dragHandleModifier = dragButtonModifier,
-        onToggleHide = onHideSwitch,
-        onAttribute = onAttribute,
-        onClick = {
-            if (selected) onUnSelected() else onSelected()
-        },
+    val borderWidth by animateDpAsState(
+        if (selected && enabled) 4.dp
+        else (-1).dp
     )
+
+    Surface(
+        modifier = modifier.border(
+            width = borderWidth,
+            color = borderColor,
+            shape = shape
+        ),
+        color = color,
+        contentColor = contentColor,
+        shape = shape,
+        shadowElevation = shadowElevation,
+        onClick = {
+            if (selected) onUnSelected()
+            else onSelected()
+        },
+        enabled = enabled
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape = MaterialTheme.shapes.large)
+                .padding(all = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onHideSwitch,
+                enabled = enabled
+            ) {
+                Crossfade(
+                    targetState = layer.editorHide
+                ) { isHide ->
+                    Icon(
+                        painter = painterResource(
+                            if (isHide) {
+                                R.drawable.ic_visibility_off_outlined
+                            } else {
+                                R.drawable.ic_visibility_outlined
+                            }
+                        ),
+                        contentDescription = null
+                    )
+                }
+            }
+            MarqueeText(
+                modifier = Modifier.weight(1f),
+                text = layer.name.orUnspecified(),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            IconButton(
+                onClick = onAttribute,
+                enabled = enabled
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_horiz),
+                    contentDescription = stringResource(R.string.control_editor_layers_attribute)
+                )
+            }
+            Row(
+                modifier = dragButtonModifier
+                    .fillMaxHeight()
+                    .clip(CircleShape),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    modifier = Modifier.padding(all = 4.dp),
+                    painter = painterResource(R.drawable.ic_drag_handle),
+                    contentDescription = null
+                )
+            }
+        }
+    }
 }

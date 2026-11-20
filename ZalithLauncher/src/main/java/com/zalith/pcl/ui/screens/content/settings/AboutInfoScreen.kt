@@ -1,15 +1,6 @@
 /*
- * ZPCL Launcher —— Zalith Launcher 2 的修改版（非官方）。
- * 上游版权：Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
- * 本文件自 2026 年起被修改；修改声明与名称/标识的处理见仓库根目录 NOTICE.md。
- *
- * 本程序为自由软件：你可以依据 GNU 通用公共许可证第 3 版（或更高版本）重新发布
- * 和/或修改它。分发时请保留本声明、上游版权与 LICENSE。
- */
-
-/*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,7 +27,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,7 +49,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -69,6 +58,7 @@ import com.zalith.pcl.R
 import com.zalith.pcl.game.plugin.ApkPlugin
 import com.zalith.pcl.game.plugin.PluginLoader
 import com.zalith.pcl.game.plugin.appCacheIcon
+import com.zalith.pcl.launcherName
 import com.zalith.pcl.library.LibraryInfo
 import com.zalith.pcl.library.libraryData
 import com.zalith.pcl.path.URL_COMMUNITY
@@ -79,6 +69,7 @@ import com.zalith.pcl.path.URL_WEBLATE
 import com.zalith.pcl.ui.base.BaseScreen
 import com.zalith.pcl.ui.components.AnimatedLazyColumn
 import com.zalith.pcl.ui.components.CardTitleLayout
+import com.zalith.pcl.ui.components.animated
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.NormalNavKey
 import com.zalith.pcl.ui.screens.TitledNavKey
@@ -86,6 +77,7 @@ import com.zalith.pcl.ui.screens.content.settings.layouts.CardPosition
 import com.zalith.pcl.ui.screens.content.settings.layouts.SettingsCard
 import com.zalith.pcl.ui.theme.itemColor
 import com.zalith.pcl.ui.theme.onItemColor
+import com.movtery.petlib.R as PetLibR
 
 @Composable
 fun AboutInfoScreen(
@@ -93,6 +85,7 @@ fun AboutInfoScreen(
     settingsScreenKey: TitledNavKey?,
     mainScreenKey: TitledNavKey?,
     checkUpdate: () -> Unit,
+    onViewSponsors: () -> Unit,
     openLicense: (raw: Int) -> Unit,
     openLink: (url: String) -> Unit
 ) {
@@ -104,18 +97,19 @@ fun AboutInfoScreen(
             modifier = Modifier.fillMaxSize(),
             isVisible = isVisible,
             contentPadding = PaddingValues(all = 12.dp)
-        ) { scope ->
-            animatedItem(scope) { yOffset ->
+        ) {
+            animatedItem { ctx ->
                 ChunkLayout(
-                    modifier = Modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
+                    modifier = Modifier.animated(ctx),
                     title = stringResource(R.string.about_launcher_title)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val launcherName = remember { launcherName() }
+
                         ButtonIconItem(
                             icon = painterResource(R.drawable.img_launcher),
                             title = BuildKeys.LAUNCHER_NAME,
-                            text = stringResource(R.string.about_launcher_version, BuildConfig.VERSION_NAME) +
-                                    "\n" + stringResource(R.string.about_launcher_description_text),
+                            text = stringResource(R.string.about_launcher_version, BuildConfig.VERSION_NAME),
                             button = {
                                 Button(
                                     onClick = checkUpdate
@@ -129,16 +123,44 @@ fun AboutInfoScreen(
                                 }
                             }
                         )
+
+                        ButtonIconItem(
+                            icon = painterResource(R.drawable.img_avatar_movtery),
+                            title = stringResource(R.string.about_launcher_author_movtery_title),
+                            text = stringResource(R.string.about_launcher_author_movtery_text, launcherName),
+                            button = {
+                                Button(
+                                    onClick = { openLink(URL_SUPPORT) }
+                                ) {
+                                    Text(text = stringResource(R.string.about_sponsor))
+                                }
+                            }
+                        )
                     }
                 }
             }
 
-            animatedItem(scope) { yOffset ->
+            animatedItem { ctx ->
                 ChunkLayout(
-                    modifier = Modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
+                    modifier = Modifier.animated(ctx),
                     title = stringResource(R.string.about_acknowledgements_title)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val launcherName = remember { launcherName() }
+
+                        ButtonIconItem(
+                            icon = painterResource(R.drawable.img_sponsor),
+                            title = stringResource(R.string.about_sponsors_title),
+                            text = stringResource(R.string.about_sponsors_summary, launcherName),
+                            button = {
+                                Button(
+                                    onClick = onViewSponsors
+                                ) {
+                                    Text(text = stringResource(R.string.generic_view))
+                                }
+                            }
+                        )
+
                         ButtonIconItem(
                             icon = painterResource(R.drawable.img_avatar_bangbang93),
                             title = "bangbang93",
@@ -184,6 +206,13 @@ fun AboutInfoScreen(
                             }
                         )
                         LinkIconItem(
+                            icon = painterResource(R.drawable.img_platform_modrinth),
+                            title = "Modrinth App",
+                            text = stringResource(R.string.about_acknowledgements_modrinth_text, BuildKeys.LAUNCHER_SHORT_NAME),
+                            openLicense = { openLicense(PetLibR.raw.modrinth_license) },
+                            openLink = { openLink("https://github.com/modrinth/code") },
+                        )
+                        LinkIconItem(
                             icon = painterResource(R.drawable.img_launcher_pcl2),
                             title = "Plain Craft Launcher 2",
                             text = stringResource(R.string.about_acknowledgements_pcl_text, BuildKeys.LAUNCHER_SHORT_NAME),
@@ -214,9 +243,9 @@ fun AboutInfoScreen(
             }
 
             //额外依赖库板块
-            animatedItem(scope) { yOffset ->
+            animatedItem { ctx ->
                 ChunkLayout(
-                    modifier = Modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
+                    modifier = Modifier.animated(ctx),
                     title = stringResource(R.string.about_library_title)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -229,9 +258,9 @@ fun AboutInfoScreen(
 
             //已加载插件板块
             PluginLoader.allPlugins.takeIf { it.isNotEmpty() }?.let { allPlugins ->
-                animatedItem(scope) { yOffset ->
+                animatedItem { ctx ->
                     ChunkLayout(
-                        modifier = Modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
+                        modifier = Modifier.animated(ctx),
                         title = stringResource(R.string.about_plugin_title)
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

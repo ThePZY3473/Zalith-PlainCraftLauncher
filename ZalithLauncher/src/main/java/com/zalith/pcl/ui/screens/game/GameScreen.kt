@@ -1,15 +1,6 @@
 /*
- * ZPCL Launcher —— Zalith Launcher 2 的修改版（非官方）。
- * 上游版权：Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
- * 本文件自 2026 年起被修改；修改声明与名称/标识的处理见仓库根目录 NOTICE.md。
- *
- * 本程序为自由软件：你可以依据 GNU 通用公共许可证第 3 版（或更高版本）重新发布
- * 和/或修改它。分发时请保留本声明、上游版权与 LICENSE。
- */
-
-/*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -73,7 +64,6 @@ import com.movtery.inputmap.keycodes.LwjglGlfwKeycode
 import com.movtery.inputmap.keycodes.OPEN_CHAT
 import com.movtery.inputmap.keycodes.OPEN_CHAT_VALUE
 import com.movtery.layer_controller.ControlBoxLayout
-import com.movtery.layer_controller.LayerControllerConfig
 import com.movtery.layer_controller.data.HideLayerWhen
 import com.movtery.layer_controller.event.ClickEvent
 import com.movtery.layer_controller.event.EventHandler
@@ -87,7 +77,6 @@ import com.zalith.pcl.bridge.ZLBridgeStates
 import com.zalith.pcl.bridge.ZLNativeInvoker
 import com.zalith.pcl.game.input.LWJGLCharSender
 import com.zalith.pcl.game.keycodes.mapToKeycode
-import com.zalith.pcl.game.control.ControlManager
 import com.zalith.pcl.game.launch.handler.GameHandler
 import com.zalith.pcl.game.sdl.SdlBridge
 import com.zalith.pcl.game.sdl.SdlTextSender
@@ -371,25 +360,10 @@ private class GameViewModel(
     /**
      * 开始编辑控制布局模式
      */
-    fun startControlEditor(editorVM: EditorViewModel, context: android.content.Context) {
-        if (isEditingLayout) return
-        viewModelScope.launch(Dispatchers.Main) {
+    fun startControlEditor(editorVM: EditorViewModel) {
+        if (!isEditingLayout) {
             clearState()
-            // 必须拿到一个真实文件：ControlEditor 保存时要用它。目录为空时先补默认布局。
-            val file = currentControlFile?.takeIf { it.isFile }
-                ?: version.getControlPath()?.takeIf { it.isFile }
-                ?: ControlManager.ensureDefaultControl(context)
-            if (file == null) {
-                android.widget.Toast.makeText(
-                    context,
-                    "没有可用的控制布局文件，无法编辑。请先在设置中重新导入默认布局。",
-                    android.widget.Toast.LENGTH_LONG,
-                ).show()
-                return@launch
-            }
-            currentControlFile = file
-            val layout = withContext(Dispatchers.IO) { getLayout(file) }
-            editorVM.initLayout(layout)
+            editorVM.initLayout(getLayout())
             isEditingLayout = true
         }
     }
@@ -528,9 +502,12 @@ private class GameTextSender(private val scope: CoroutineScope) {
 
     private suspend fun sendMessage(text: String, inGame: Boolean) {
         withContext(Dispatchers.Main) {
+            // 仅 SDL 渲染路径（MC 26.3+）经 SDL 通道提交；仅手柄子系统初始化 SDL 时游戏输入仍走 GLFW 桥
+            val useSdl = SdlBridge.sdlEnabled && SdlBridge.isSdlRenderActive()
+
             fun sendText() {
                 for (ch in text) {
-                    if (SdlBridge.sdlEnabled) {
+                    if (useSdl) {
                         SdlTextSender.sendChar(ch)
                     } else {
                         LWJGLCharSender.sendChar(ch)
@@ -542,12 +519,14 @@ private class GameTextSender(private val scope: CoroutineScope) {
                 //根据options.txt中的配置，找到打开聊天栏的键
                 //如果找不到，则忽略这次事件
                 mapToKeycode(OPEN_CHAT, OPEN_CHAT_VALUE)?.let { openChat ->
-                    if (SdlBridge.sdlEnabled) {
+                    if (useSdl) {
                         SdlTextSender.sendKey(openChat)
-                        delay(50L.milliseconds)
-                        sendText()
-                        delay(50L.milliseconds)
-                        SdlTextSender.sendEnter()
+                        // 等待游戏侧激活文本输入通道，未激活就提交的文本会被 SDL 丢弃
+                        if (SdlTextSender.awaitTextInputActive()) {
+                            sendText()
+                            delay(50L.milliseconds)
+                            SdlTextSender.sendEnter()
+                        }
                     } else {
                         CallbackBridge.sendKeyPress(openChat)
                         delay(50L.milliseconds)
@@ -604,10 +583,6 @@ fun GameScreen(
     }
     val editorViewModel = rememberEditorViewModel("ControlEditor_Times=${viewModel.editorRefresh}")
     val cursorMode by ZLBridgeStates.cursorMode.collectAsStateWithLifecycle()
-    val joystickForwardLock = AllSettings.joystickForwardLock.state
-    LaunchedEffect(joystickForwardLock) {
-        LayerControllerConfig.joystickForwardLockEnabled = joystickForwardLock
-    }
     val isGrabbing = remember(cursorMode) {
         cursorMode == CURSOR_DISABLED
     }
@@ -635,8 +610,7 @@ fun GameScreen(
         onChange = { viewModel.forceCloseState = it },
         onForceClose = {
             Terracotta.setWaiting(false)
-            // 同上：这是用户主动关的，别报「游戏崩溃」
-            ZLNativeInvoker.exitByUser()
+            ZLNativeInvoker.jvmExit(0, false)
         },
         text = stringResource(R.string.game_menu_option_force_close_text)
     )
@@ -698,7 +672,7 @@ fun GameScreen(
                 observedLayout = viewModel.observableLayout,
                 eventHandler = viewModel.eventHandler,
                 checkOccupiedPointers = { viewModel.occupiedPointers.contains(it) },
-                opacity = (AllSettings.controlsOpacity.state.toFloat() / 100f).coerceIn(0f, 1f),
+                opacity = { (AllSettings.controlsOpacity.state.toFloat() / 100f).coerceIn(0f, 1f) },
                 markPointerAsMoveOnly = { viewModel.moveOnlyPointers.add(it) },
                 onOccupiedPointer = { viewModel.occupiedPointers.add(it) },
                 onReleasePointer = { viewModel.occupiedPointers.remove(it) },
@@ -798,8 +772,7 @@ fun GameScreen(
             onReplacementControl = { viewModel.replacementControlState = ReplacementControlState.Show },
             onEditLayout = {
                 viewModel.startControlEditor(
-                    editorVM = editorViewModel,
-                    context = context,
+                    editorVM = editorViewModel
                 )
             },
             onShowToast = { text, duration ->
@@ -851,12 +824,6 @@ fun GameScreen(
                     }
                 }
 
-                val gameFps: Int? = if (showFps) {
-                    viewModel.gameFps
-                } else {
-                    null
-                }
-
                 DraggableGameBall(
                     position = AllSettings.menuBallPos.state,
                     onPositionChanged = {
@@ -865,11 +832,11 @@ fun GameScreen(
                     onSavePos = {
                         AllSettings.menuBallPos.save()
                     },
-                    gameFps = gameFps,
+                    gameFps = { if (showFps) viewModel.gameFps else null },
                     fpsDisplayMode = AllSettings.fpsDisplayMode.state,
-                    fpsHistory = viewModel.fpsHistory,
-                    fpsMax = viewModel.fpsMax,
-                    fpsMin = viewModel.fpsMin,
+                    fpsHistory = { viewModel.fpsHistory },
+                    fpsMax = { viewModel.fpsMax },
+                    fpsMin = { viewModel.fpsMin },
                     showMemory = AllSettings.showMemory.state,
                     opened = viewModel.gameMenuState == MenuState.SHOW,
                     alpha = AllSettings.menuBallOpacity.state / 100f,
@@ -1053,7 +1020,7 @@ private fun MouseControlLayout(
             onMouse = onMouseMoved,
             gamepadViewModel = gamepadViewModel,
             onTap = { position ->
-                val gamePosition = position.toGameWindowPosition(screenSize)
+                val gamePosition = currentGameDisplayLayout(screenSize).mapToGame(position)
                 CallbackBridge.putMouseEventWithCoords(LwjglGlfwKeycode.GLFW_MOUSE_BUTTON_LEFT.toInt(), gamePosition.x, gamePosition.y)
             },
             onCapturedTap = {
@@ -1104,16 +1071,7 @@ private fun MouseControlLayout(
     }
 }
 
-/** 触控层坐标 → GLFW 实际窗口坐标（窗口尺寸由 native 回传）。 */
-private fun Offset.toGameWindowPosition(screenSize: IntSize): Offset {
-    return currentGameDisplayLayout(screenSize).mapToWindow(
-        position = this,
-        windowWidth = CallbackBridge.windowWidth,
-        windowHeight = CallbackBridge.windowHeight,
-    )
-}
-
 private fun Offset.sendPosition(screenSize: IntSize) {
-    val gamePosition = toGameWindowPosition(screenSize)
+    val gamePosition = currentGameDisplayLayout(screenSize).mapToGame(this)
     CallbackBridge.sendCursorPos(gamePosition.x, gamePosition.y)
 }

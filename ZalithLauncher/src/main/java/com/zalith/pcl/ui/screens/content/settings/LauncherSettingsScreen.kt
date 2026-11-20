@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,6 @@
 
 package com.zalith.pcl.ui.screens.content.settings
 
-import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
@@ -35,7 +34,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -44,7 +42,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,7 +63,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -86,7 +82,6 @@ import com.zalith.pcl.setting.enums.DarkMode
 import com.zalith.pcl.setting.enums.MirrorSourceType
 import com.zalith.pcl.setting.enums.applyLanguage
 import com.zalith.pcl.setting.unit.floatRange
-import com.zalith.pcl.ui.activities.Pcl2Activity
 import com.zalith.pcl.ui.androidText
 import com.zalith.pcl.ui.base.BaseScreen
 import com.zalith.pcl.ui.components.AnimatedColumn
@@ -96,6 +91,7 @@ import com.zalith.pcl.ui.components.RadioCard
 import com.zalith.pcl.ui.components.SimpleAlertDialog
 import com.zalith.pcl.ui.components.SimpleEditDialog
 import com.zalith.pcl.ui.components.TitleAndSummary
+import com.zalith.pcl.ui.components.animated
 import com.zalith.pcl.ui.components.fadeEdge
 import com.zalith.pcl.ui.components.rememberDialogMaxHeight
 import com.zalith.pcl.ui.components.toColorOrNull
@@ -112,10 +108,10 @@ import com.zalith.pcl.ui.screens.content.settings.layouts.ListSettingsCard
 import com.zalith.pcl.ui.screens.content.settings.layouts.SettingsCard
 import com.zalith.pcl.ui.screens.content.settings.layouts.SettingsCardColumn
 import com.zalith.pcl.ui.screens.content.settings.layouts.SwitchSettingsCard
+import com.zalith.pcl.ui.systemLocaleStringResource
 import com.zalith.pcl.ui.theme.ColorThemeType
 import com.zalith.pcl.ui.theme.cardColor
 import com.zalith.pcl.ui.theme.onCardColor
-import com.zalith.pcl.utils.animation.TransitionAnimationType
 import com.zalith.pcl.utils.file.shareFile
 import com.zalith.pcl.utils.isChinaMainland
 import com.zalith.pcl.utils.logging.Logger
@@ -134,7 +130,6 @@ private sealed interface CustomColorOperation {
     data object Dialog: CustomColorOperation
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LauncherSettingsScreen(
     key: NestedNavKey.Settings,
@@ -154,47 +149,51 @@ fun LauncherSettingsScreen(
                 .verticalScrollWithBar(state = rememberScrollState())
                 .padding(all = 12.dp),
             isVisible = isVisible
-        ) { scope ->
-            //PCL2 界面入口
-            //应用只保留一个桌面图标（SplashActivity），进来之后由「使用 PCL2 风格界面作为主界面」
-            //这个开关决定落在哪一边；所以关掉开关之后，原生界面里必须留一条随时能回去的路。
-            AnimatedItem(scope) { yOffset ->
+        ) {
+            AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                        .animated(ctx)
                 ) {
-                    SettingsCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        position = CardPosition.Single,
-                        title = stringResource(R.string.settings_launcher_switch_pcl2_title),
-                        summary = stringResource(R.string.settings_launcher_switch_pcl2_summary),
-                        trailingIcon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_keyboard_arrow_right),
-                                contentDescription = null
-                            )
-                        },
-                        onClick = {
-                            //顺手把「主界面」也设成 PCL2 界面，免得下次从桌面图标进来又回到这边
-                            AllSettings.usePcl2Ui.save(true)
-                            context.startActivity(Intent(context, Pcl2Activity::class.java))
-                        }
+                    var customColorOperation by remember { mutableStateOf<CustomColorOperation>(CustomColorOperation.None) }
+                    CustomColorOperation(
+                        customColorOperation = customColorOperation,
+                        updateOperation = { customColorOperation = it }
                     )
-                }
-            }
 
-            AnimatedItem(scope) { yOffset ->
-                SettingsCardColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
-                ) {
-                    // 配色主题（ColorThemeType + 自定义颜色对话框）已整块移除：
-                    // 启动器现在只有一套固定配色，不再提供任何主题入口。
-                    ListSettingsCard(
+                    EnumSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
                         position = CardPosition.Top,
+                        unit = AllSettings.launcherColorTheme,
+                        title = stringResource(R.string.settings_launcher_color_theme_title),
+                        summary = stringResource(R.string.settings_launcher_color_theme_summary),
+                        entries = ColorThemeType.entries,
+                        getRadioEnable = { enum ->
+                            enum != ColorThemeType.DYNAMIC || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                        },
+                        getRadioText = { enum ->
+                            when (enum) {
+                                ColorThemeType.DYNAMIC -> stringResource(R.string.theme_color_dynamic)
+                                ColorThemeType.EMBERMIRE -> stringResource(R.string.theme_color_embermire)
+                                ColorThemeType.VELVET_ROSE -> stringResource(R.string.theme_color_velvet_rose)
+                                ColorThemeType.MISTWAVE -> stringResource(R.string.theme_color_mistwave)
+                                ColorThemeType.GLACIER -> stringResource(R.string.theme_color_glacier)
+                                ColorThemeType.VERDANTFIELD -> stringResource(R.string.theme_color_verdant_field)
+                                ColorThemeType.URBAN_ASH -> stringResource(R.string.theme_color_urban_ash)
+                                ColorThemeType.VERDANT_DAWN -> stringResource(R.string.theme_color_verdant_dawn)
+                                ColorThemeType.CUSTOM -> stringResource(R.string.generic_custom)
+                            }
+                        },
+                        maxItemsInEachRow = 5,
+                        onRadioClick = { enum ->
+                            if (enum == ColorThemeType.CUSTOM) customColorOperation = CustomColorOperation.Dialog
+                        }
+                    )
+
+                    ListSettingsCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        position = CardPosition.Middle,
                         unit = AllSettings.launcherDarkMode,
                         items = DarkMode.entries,
                         title = stringResource(R.string.settings_launcher_dark_mode_title),
@@ -206,8 +205,11 @@ fun LauncherSettingsScreen(
                         position = CardPosition.Middle,
                         unit = AllSettings.launcherLanguage,
                         items = AppLanguage.entries,
-                        title = stringResource(R.string.settings_launcher_language),
-                        getItemText = { stringResource(it.textRes) },
+                        title = systemLocaleStringResource(R.string.settings_launcher_language),
+                        getItemText = {
+                            if (it == AppLanguage.FOLLOW_SYSTEM) systemLocaleStringResource(it.textRes)
+                            else stringResource(it.textRes)
+                        },
                         onValueChange = {
                             applyLanguage(it)
                         }
@@ -233,11 +235,11 @@ fun LauncherSettingsScreen(
 
             //启动器背景设置板块
             LocalBackgroundViewModel.current?.let { backgroundViewModel ->
-                AnimatedItem(scope) { yOffset ->
+                AnimatedItem { ctx ->
                     SettingsCardColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                            .animated(ctx)
                     ) {
                         SettingsCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -322,52 +324,38 @@ fun LauncherSettingsScreen(
             }
 
             //动画设置板块
-            AnimatedItem(scope) { yOffset ->
+            AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                        .animated(ctx)
                 ) {
-                    IntSliderSettingsCard(
+                    SwitchSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
                         position = CardPosition.Top,
-                        unit = AllSettings.launcherAnimateSpeed,
-                        title = stringResource(R.string.settings_launcher_animate_speed_title),
-                        summary = stringResource(R.string.settings_launcher_animate_speed_summary),
-                        valueRange = AllSettings.launcherAnimateSpeed.floatRange,
-                        suffix = "x"
+                        unit = AllSettings.launcherSwapAnimEnabled,
+                        title = stringResource(R.string.settings_launcher_swap_anim_enabled_title),
+                        summary = stringResource(R.string.settings_launcher_swap_anim_enabled_summary)
                     )
 
                     IntSliderSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
-                        position = CardPosition.Middle,
-                        unit = AllSettings.launcherAnimateExtent,
-                        title = stringResource(R.string.settings_launcher_animate_extent_title),
-                        summary = stringResource(R.string.settings_launcher_animate_extent_summary),
-                        valueRange = AllSettings.launcherAnimateExtent.floatRange,
-                        suffix = "x"
-                    )
-
-                    EnumSettingsCard(
-                        modifier = Modifier.fillMaxWidth(),
                         position = CardPosition.Bottom,
-                        unit = AllSettings.launcherSwapAnimateType,
-                        title = stringResource(R.string.settings_launcher_swap_animate_type_title),
-                        summary = stringResource(R.string.settings_launcher_swap_animate_type_summary),
-                        entries = TransitionAnimationType.entries,
-                        getRadioEnable = { true },
-                        getRadioText = { enum ->
-                            stringResource(enum.textRes)
-                        }
+                        unit = AllSettings.launcherAnimateSpeedLevel,
+                        title = stringResource(R.string.settings_launcher_animate_speed_title),
+                        summary = stringResource(R.string.settings_launcher_animate_speed_summary),
+                        valueRange = AllSettings.launcherAnimateSpeedLevel.floatRange,
+                        valueText = { value -> "×" + (value / 10f) },
+                        enabled = AllSettings.launcherSwapAnimEnabled.state,
                     )
                 }
             }
 
-            AnimatedItem(scope) { yOffset ->
+            AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                        .animated(ctx)
                 ) {
                     //这些镜像源都是为了改善中国大陆内陆的网络环境而存在的
                     //境外不需要这些镜像源，反而可能拖慢境外的下载速度

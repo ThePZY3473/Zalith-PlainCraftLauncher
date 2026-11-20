@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@ package com.zalith.pcl.ui.screens.main.control_editor.edit_style
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,15 +37,21 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.nonInteractiveScrollbar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -54,7 +61,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.movtery.layer_controller.layout.RendererStyleBox
 import com.movtery.layer_controller.observable.ObservableButtonStyle
-import com.zalith.pcl.ui.pcl2.components.PclDialogButton
 import com.zalith.pcl.R
 import com.zalith.pcl.setting.enums.isLauncherInDarkTheme
 import com.zalith.pcl.ui.components.MarqueeText
@@ -62,9 +68,9 @@ import com.zalith.pcl.ui.components.fadeEdge
 import com.zalith.pcl.ui.components.rememberDialogMaxHeight
 import com.zalith.pcl.ui.screens.main.control_editor.InfoLayoutItem
 import com.zalith.pcl.ui.screens.main.control_editor.InfoLayoutTextItem
+import com.zalith.pcl.ui.screens.main.control_editor.orUnspecified
 import com.zalith.pcl.ui.theme.cardColor
 import com.zalith.pcl.ui.theme.onCardColor
-import com.zalith.pcl.utils.string.isNotEmptyOrBlank
 
 @Composable
 fun StyleListDialog(
@@ -73,6 +79,8 @@ fun StyleListDialog(
     onCreate: () -> Unit,
     onClone: (ObservableButtonStyle) -> Unit,
     onDelete: (ObservableButtonStyle) -> Unit,
+    onFavorite: (ObservableButtonStyle) -> Unit,
+    onOpenCabinet: () -> Unit,
     onClose: () -> Unit
 ) {
     Dialog(
@@ -98,7 +106,7 @@ fun StyleListDialog(
                 shadowElevation = 3.dp,
                 color = cardColor(false),
                 contentColor = onCardColor(),
-                shape = RoundedCornerShape(5.dp)
+                shape = MaterialTheme.shapes.extraLarge
             ) {
                 Column(
                     modifier = Modifier.padding(all = 16.dp),
@@ -133,7 +141,8 @@ fun StyleListDialog(
                                     style = style,
                                     onClick = { onEditStyle(style) },
                                     onClone = { onClone(style) },
-                                    onDelete = { onDelete(style) }
+                                    onDelete = { onDelete(style) },
+                                    onFavorite = { onFavorite(style) }
                                 )
                             }
                         }
@@ -147,20 +156,30 @@ fun StyleListDialog(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        PclDialogButton(
-                            modifier = Modifier.weight(1f, fill = false),
-                            onClick = onCreate
+                        //样式收藏柜入口
+                        FilledTonalButton(
+                            onClick = onOpenCabinet
                         ) {
-                            MarqueeText(text = stringResource(R.string.control_manage_create_new))
+                            MarqueeText(text = stringResource(R.string.control_editor_style_cabinet))
                         }
-                        Spacer(Modifier.width(16.dp))
-                        PclDialogButton(highlight = true,
-                            modifier = Modifier.weight(1f, fill = false),
-                            onClick = onClose
-                        ) {
-                            MarqueeText(text = stringResource(R.string.generic_close))
+
+                        Row(horizontalArrangement = Arrangement.End) {
+                            FilledTonalButton(
+                                modifier = Modifier.weight(1f, fill = false),
+                                onClick = onCreate
+                            ) {
+                                MarqueeText(text = stringResource(R.string.control_manage_create_new))
+                            }
+                            Spacer(Modifier.width(16.dp))
+                            Button(
+                                modifier = Modifier.weight(1f, fill = false),
+                                onClick = onClose
+                            ) {
+                                MarqueeText(text = stringResource(R.string.generic_close))
+                            }
                         }
                     }
                 }
@@ -175,8 +194,11 @@ private fun StyleItem(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onClone: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onFavorite: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     InfoLayoutItem(
         modifier = modifier,
         onClick = onClick
@@ -193,24 +215,66 @@ private fun StyleItem(
             modifier = Modifier
                 .padding(vertical = 8.dp)
                 .weight(1f),
-            text = style.name.takeIf { it.isNotEmptyOrBlank() } ?: stringResource(R.string.generic_unspecified),
+            text = style.name.orUnspecified(),
             style = MaterialTheme.typography.bodyMedium
         )
-        IconButton(
-            onClick = onClone
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_copy_all_outlined),
-                contentDescription = stringResource(R.string.generic_copy)
-            )
-        }
-        IconButton(
-            onClick = onDelete
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_delete_outlined),
-                contentDescription = stringResource(R.string.generic_delete)
-            )
+        Box {
+            IconButton(onClick = { menuExpanded = !menuExpanded }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_horiz),
+                    contentDescription = stringResource(R.string.generic_more)
+                )
+            }
+
+            DropdownMenu(
+                expanded = menuExpanded,
+                shape = MaterialTheme.shapes.large,
+                shadowElevation = 3.dp,
+                onDismissRequest = { menuExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(R.string.generic_copy)) },
+                    leadingIcon = {
+                        Icon(
+                            modifier = Modifier.size(20.dp),
+                            painter = painterResource(R.drawable.ic_copy_all_outlined),
+                            contentDescription = stringResource(R.string.generic_copy)
+                        )
+                    },
+                    onClick = {
+                        onClone()
+                        menuExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(R.string.generic_delete)) },
+                    leadingIcon = {
+                        Icon(
+                            modifier = Modifier.size(20.dp),
+                            painter = painterResource(R.drawable.ic_delete_filled),
+                            contentDescription = stringResource(R.string.generic_delete)
+                        )
+                    },
+                    onClick = {
+                        onDelete()
+                        menuExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(R.string.control_editor_style_cabinet_favorite)) },
+                    leadingIcon = {
+                        Icon(
+                            modifier = Modifier.size(20.dp),
+                            painter = painterResource(R.drawable.ic_add_box_filled),
+                            contentDescription = stringResource(R.string.control_editor_style_cabinet_favorite)
+                        )
+                    },
+                    onClick = {
+                        onFavorite()
+                        menuExpanded = false
+                    }
+                )
+            }
         }
         Icon(
             modifier = Modifier

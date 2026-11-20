@@ -1,15 +1,6 @@
 /*
- * ZPCL Launcher —— Zalith Launcher 2 的修改版（非官方）。
- * 上游版权：Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
- * 本文件自 2026 年起被修改；修改声明与名称/标识的处理见仓库根目录 NOTICE.md。
- *
- * 本程序为自由软件：你可以依据 GNU 通用公共许可证第 3 版（或更高版本）重新发布
- * 和/或修改它。分发时请保留本声明、上游版权与 LICENSE。
- */
-
-/*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,66 +18,55 @@
 
 package com.zalith.pcl.ui.screens.splash
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.ui.NavDisplay
-import com.zalith.pcl.BuildKeys
+import com.zalith.pcl.R
 import com.zalith.pcl.components.InstallableItem
-import com.zalith.pcl.setting.AllSettings
-import com.zalith.pcl.ui.screens.NormalNavKey
+import com.zalith.pcl.legal.AvailableAgreement
+import com.zalith.pcl.ui.base.BaseScreen
+import com.zalith.pcl.ui.components.AnimatedDirection
+import com.zalith.pcl.ui.components.animated
+import com.zalith.pcl.ui.components.rememberAnimatedContext
+import com.zalith.pcl.ui.screens.NavStateHost
+import com.zalith.pcl.ui.screens.NestedNavDisplay
 import com.zalith.pcl.ui.screens.rememberTransitionSpec
-import com.zalith.pcl.ui.theme.onBackgroundColor
 import com.zalith.pcl.viewmodel.SplashBackStackViewModel
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * @param startAllTask 开启全部的解压任务
+ * @param onWelcomeFinished 完成欢迎页
+ * @param availableAgreement 完整的可用协议数据
  * @param unpackItems 解压任务列表
  */
-/** 修改版声明：GPLv3 第 7 条要求，必须出现在启动页。 */
-private const val UNOFFICIAL_NOTICE = "非官方修改版 · 与 Zalith Launcher 官方无关"
-
 @Composable
 fun SplashScreen(
     startAllTask: () -> Unit,
+    onWelcomeFinished: () -> Unit,
+    availableAgreement: StateFlow<AvailableAgreement?>,
     unpackItems: List<InstallableItem>,
     screenViewModel: SplashBackStackViewModel
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-    ) {
-        // PCL2 模式下解压页（`UnpackScreen → PclUnpackContent`）**自带**一条 PCL 顶栏，
-        // 这里再画一条就会上下两个标题（第 114 轮用户反馈）。
-        // 原生模式仍然需要它：Material 版的 UnpackScreen 是不带标题栏的。
-        if (!AllSettings.usePcl2Ui.state) {
-            TopBar(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(40.dp),
-                contentColor = onBackgroundColor()
-            )
-        }
-
+    NavStateHost(rootKey = screenViewModel.splashScreen) {
         NavigationUI(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             startAllTask = startAllTask,
+            onWelcomeFinished = onWelcomeFinished,
+            availableAgreement = availableAgreement,
             unpackItems = unpackItems,
             screenViewModel = screenViewModel
         )
@@ -94,36 +74,13 @@ fun SplashScreen(
 }
 
 @Composable
-private fun TopBar(
-    modifier: Modifier = Modifier,
-    contentColor: Color,
-) {
-    CompositionLocalProvider(
-        LocalContentColor provides contentColor
-    ) {
-        // 【GPLv3 第 7 条】修改版必须在启动页显著标注「非官方修改版」。
-        // 顶栏原来只有一行程序名，这里在下面补一行，两行都居中。
-        Column(
-            modifier = modifier,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(text = BuildKeys.LAUNCHER_NAME)
-            Text(
-                text = UNOFFICIAL_NOTICE,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.65f),
-            )
-        }
-    }
-}
-
-@Composable
 private fun NavigationUI(
     modifier: Modifier = Modifier,
     startAllTask: () -> Unit,
+    onWelcomeFinished: () -> Unit,
+    availableAgreement: StateFlow<AvailableAgreement?>,
     unpackItems: List<InstallableItem>,
-    screenViewModel: SplashBackStackViewModel,
+    screenViewModel: SplashBackStackViewModel
 ) {
     val backStack = screenViewModel.splashScreen.backStack
 
@@ -133,20 +90,69 @@ private fun NavigationUI(
     }
 
     if (backStack.isNotEmpty()) {
-        NavDisplay(
+        NestedNavDisplay(
+            ownerKey = screenViewModel.splashScreen,
             backStack = backStack,
             modifier = modifier,
+            onBack = {},
             transitionSpec = rememberTransitionSpec(),
             popTransitionSpec = rememberTransitionSpec(),
             entryProvider = entryProvider {
-                entry<NormalNavKey.UnpackDeps> {
-                    UnpackScreen(unpackItems, screenViewModel, {
-                        startAllTask()
-                    })
+                entry<SplashOperation.Loading> {
+                    LoadingScreen(screenViewModel = screenViewModel)
+                }
+                entry<SplashOperation.Welcome> {
+                    WelcomeScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        onFinished = onWelcomeFinished,
+                        availableAgreement = availableAgreement,
+                        screenViewModel = screenViewModel
+                    )
+                }
+                entry<SplashOperation.Unpacking> {
+                    UnpackScreen(
+                        items = unpackItems,
+                        screenViewModel = screenViewModel,
+                        onAgreeClick = startAllTask
+                    )
                 }
             }
         )
     } else {
         Box(modifier)
+    }
+}
+
+@Composable
+private fun LoadingScreen(
+    screenViewModel: SplashBackStackViewModel
+) {
+    BaseScreen(
+        screenKey = SplashOperation.Loading,
+        currentKey = screenViewModel.splashScreen.currentKey
+    ) { isVisible ->
+        val ctx = rememberAnimatedContext(isVisible = isVisible)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .animated(ctx, from = AnimatedDirection.Bottom),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Image(
+                    modifier = Modifier.size(58.dp),
+                    painter = painterResource(R.drawable.img_launcher),
+                    contentDescription = stringResource(R.string.generic_loading)
+                )
+                LinearWavyProgressIndicator(
+                    modifier = Modifier.width(128.dp),
+                    wavelength = 32.dp
+                )
+            }
+        }
     }
 }

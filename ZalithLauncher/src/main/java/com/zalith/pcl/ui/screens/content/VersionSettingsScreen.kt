@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -47,18 +46,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.ui.NavDisplay
 import com.zalith.pcl.R
 import com.zalith.pcl.game.download.assets.platform.PlatformClasses
 import com.zalith.pcl.game.version.installed.Version
 import com.zalith.pcl.game.version.installed.VersionsManager
 import com.zalith.pcl.notification.NotificationManager
 import com.zalith.pcl.ui.base.BaseScreen
+import com.zalith.pcl.ui.base.VersionViewModelStoreScope
+import com.zalith.pcl.ui.components.AnimatedDirection
+import com.zalith.pcl.ui.components.animated
 import com.zalith.pcl.ui.components.fadeEdge
+import com.zalith.pcl.ui.components.rememberAnimatedContext
+import com.zalith.pcl.ui.screens.NestedNavDisplay
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.NormalNavKey
 import com.zalith.pcl.ui.screens.TitledNavKey
@@ -76,7 +78,6 @@ import com.zalith.pcl.ui.screens.content.versions.VersionOverViewScreen
 import com.zalith.pcl.ui.screens.navigateOnce
 import com.zalith.pcl.ui.screens.onBack
 import com.zalith.pcl.ui.screens.rememberTransitionSpec
-import com.zalith.pcl.utils.animation.swapAnimateDpAsState
 import com.zalith.pcl.viewmodel.ErrorViewModel
 import com.zalith.pcl.viewmodel.EventViewModel
 import com.zalith.pcl.viewmodel.ModifyOperation
@@ -110,45 +111,47 @@ fun VersionSettingsScreen(
         }
     }
 
-    BaseScreen(
-        screenKey = key,
-        currentKey = backScreenViewModel.mainScreen.currentKey
-    ) { isVisible ->
-        Row(modifier = Modifier.fillMaxSize()) {
-            TabMenu(
-                isVisible = isVisible,
-                backStack = key.backStack,
-                versionsScreenKey = key.currentKey,
-                modifier = Modifier.fillMaxHeight()
-            )
+    VersionViewModelStoreScope(version = key.version) {
+        BaseScreen(
+            screenKey = key,
+            currentKey = backScreenViewModel.mainScreen.currentKey
+        ) { isVisible ->
+            Row(modifier = Modifier.fillMaxSize()) {
+                TabMenu(
+                    isVisible = isVisible,
+                    backStack = key.backStack,
+                    versionsScreenKey = key.currentKey,
+                    modifier = Modifier.fillMaxHeight()
+                )
 
-            NavigationUI(
-                modifier = Modifier.fillMaxHeight(),
-                key = key,
-                modifyViewModel = modifyViewModel,
-                backScreenViewModel = backScreenViewModel,
-                versionsScreenKey = key.currentKey,
-                onCurrentKeyChange = { newKey ->
-                    key.currentKey = newKey
-                },
-                backToMainScreen = backToMainScreen,
-                onExport = onExportModpack,
-                version = key.version,
-                onModify = { payload ->
-                    if (modifyViewModel.installOperation !is ModifyOperation.None) {
-                        //不是待修改状态，拒绝此次修改
-                        return@NavigationUI
-                    }
-                    if (!NotificationManager.checkNotificationEnabled(context)) {
-                        //警告通知权限
-                        modifyViewModel.installOperation = ModifyOperation.WarningForNotification(payload)
-                    } else {
-                        modifyViewModel.installOperation = ModifyOperation.Confirm(payload)
-                    }
-                },
-                eventViewModel = eventViewModel,
-                submitError = submitError
-            )
+                NavigationUI(
+                    modifier = Modifier.fillMaxHeight(),
+                    key = key,
+                    modifyViewModel = modifyViewModel,
+                    backScreenViewModel = backScreenViewModel,
+                    versionsScreenKey = key.currentKey,
+                    onCurrentKeyChange = { newKey ->
+                        key.currentKey = newKey
+                    },
+                    backToMainScreen = backToMainScreen,
+                    onExport = onExportModpack,
+                    version = key.version,
+                    onModify = { payload ->
+                        if (modifyViewModel.installOperation !is ModifyOperation.None) {
+                            //不是待修改状态，拒绝此次修改
+                            return@NavigationUI
+                        }
+                        if (!NotificationManager.checkNotificationEnabled(context)) {
+                            //警告通知权限
+                            modifyViewModel.installOperation = ModifyOperation.WarningForNotification(payload)
+                        } else {
+                            modifyViewModel.installOperation = ModifyOperation.Confirm(payload)
+                        }
+                    },
+                    eventViewModel = eventViewModel,
+                    submitError = submitError
+                )
+            }
         }
     }
 }
@@ -172,11 +175,7 @@ private fun TabMenu(
     versionsScreenKey: TitledNavKey?,
     modifier: Modifier = Modifier
 ) {
-    val xOffset by swapAnimateDpAsState(
-        targetValue = (-40).dp,
-        swapIn = isVisible,
-        isHorizontal = true
-    )
+    val ctx = rememberAnimatedContext(isVisible = isVisible)
 
     val scrollState = rememberScrollState()
     Column(
@@ -184,7 +183,7 @@ private fun TabMenu(
             .fadeEdge(scrollState)
             .width(IntrinsicSize.Min)
             .padding(start = 8.dp)
-            .offset { IntOffset(x = xOffset.roundToPx(), y = 0) }
+            .animated(ctx, from = AnimatedDirection.Left)
             .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -247,7 +246,8 @@ private fun NavigationUI(
     }
 
     if (backStack.isNotEmpty()) {
-        NavDisplay(
+        NestedNavDisplay(
+            ownerKey = key,
             backStack = backStack,
             modifier = modifier,
             onBack = {

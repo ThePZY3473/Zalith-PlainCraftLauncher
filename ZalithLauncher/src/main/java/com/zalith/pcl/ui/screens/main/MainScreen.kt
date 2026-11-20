@@ -1,15 +1,6 @@
 /*
- * ZPCL Launcher —— Zalith Launcher 2 的修改版（非官方）。
- * 上游版权：Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
- * 本文件自 2026 年起被修改；修改声明与名称/标识的处理见仓库根目录 NOTICE.md。
- *
- * 本程序为自由软件：你可以依据 GNU 通用公共许可证第 3 版（或更高版本）重新发布
- * 和/或修改它。分发时请保留本声明、上游版权与 LICENSE。
- */
-
-/*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -64,7 +55,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,12 +73,12 @@ import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.ui.NavDisplay
 import com.zalith.pcl.BuildKeys
 import com.zalith.pcl.R
 import com.zalith.pcl.coroutine.Task
 import com.zalith.pcl.coroutine.TaskSystem
 import com.zalith.pcl.game.version.installed.Version
+import com.zalith.pcl.game.version.installed.VersionsManager
 import com.zalith.pcl.path.PathManager
 import com.zalith.pcl.setting.AllSettings
 import com.zalith.pcl.ui.AndroidStringText
@@ -95,6 +88,8 @@ import com.zalith.pcl.ui.components.CardTitleLayout
 import com.zalith.pcl.ui.components.TextRailItem
 import com.zalith.pcl.ui.guide.sendStartGuideOnce
 import com.zalith.pcl.ui.screens.BackStackNavKey
+import com.zalith.pcl.ui.screens.NavStateHost
+import com.zalith.pcl.ui.screens.NestedNavDisplay
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.NormalNavKey
 import com.zalith.pcl.ui.screens.TitledNavKey
@@ -130,6 +125,7 @@ import com.zalith.pcl.viewmodel.ModifyVersionViewModel
 import com.zalith.pcl.viewmodel.ModpackImportViewModel
 import com.zalith.pcl.viewmodel.ScreenBackStackViewModel
 import com.zalith.pcl.viewmodel.sendKeepScreen
+import com.zalith.pcl.viewmodel.sendToast
 
 @Composable
 fun MainScreen(
@@ -139,15 +135,13 @@ fun MainScreen(
     modifyVersionViewModel: ModifyVersionViewModel,
     submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
-    val tasks by TaskSystem.tasksFlow.collectAsStateWithLifecycle()
-
     //监控当前是否有任务正在进行
-    LaunchedEffect(tasks) {
-        if (tasks.isEmpty()) {
-            eventViewModel.sendKeepScreen(false)
-        } else {
-            //有任务正在进行，避免熄屏
-            eventViewModel.sendKeepScreen(true)
+    var taskRunning by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        TaskSystem.tasksFlow.collect { tasks ->
+            val noTasks = tasks.isEmpty()
+            eventViewModel.sendKeepScreen(!noTasks)
+            taskRunning = noTasks
         }
     }
 
@@ -187,7 +181,7 @@ fun MainScreen(
                     .height(40.dp),
                 mainScreenKey = mainScreenKey,
                 inLauncherScreen = inLauncherScreen,
-                taskRunning = tasks.isEmpty(),
+                taskRunning = taskRunning,
                 isTasksExpanded = isTaskMenuExpanded,
                 contentColor = onBackgroundColor(),
                 onScreenBack = {
@@ -226,18 +220,19 @@ fun MainScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                NavigationUI(
-                    modifier = Modifier.fillMaxSize(),
-                    screenBackStackModel = screenBackStackModel,
-                    toMainScreen = toMainScreen,
-                    eventViewModel = eventViewModel,
-                    modpackImportViewModel = modpackImportViewModel,
-                    modifyVersionViewModel = modifyVersionViewModel,
-                    submitError = submitError
-                )
+                NavStateHost(rootKey = screenBackStackModel.mainScreen) {
+                    NavigationUI(
+                        modifier = Modifier.fillMaxSize(),
+                        screenBackStackModel = screenBackStackModel,
+                        toMainScreen = toMainScreen,
+                        eventViewModel = eventViewModel,
+                        modpackImportViewModel = modpackImportViewModel,
+                        modifyVersionViewModel = modifyVersionViewModel,
+                        submitError = submitError
+                    )
+                }
 
                 TaskMenu(
-                    tasks = tasks,
                     isExpanded = isTaskMenuExpanded,
                     modifier = Modifier
                         .fillMaxHeight()
@@ -349,9 +344,7 @@ private fun <E: TitledNavKey> TopBar(
                 if (parent == null) {
                     if (festivals.isEmpty()) {
                         Text(
-                            // 顶栏显示对外名称（ZPCL），不是内部标识符 ——
-                            // 后者是 `ZalithLauncher`，只用于数据目录与 MMKV id。
-                            text = BuildKeys.LAUNCHER_SHORT_NAME,
+                            text = BuildKeys.LAUNCHER_IDENTIFIER,
                             style = style,
                             softWrap = softWarp,
                             maxLines = maxLines
@@ -525,7 +518,8 @@ private fun NavigationUI(
             )
         }
 
-        NavDisplay(
+        NestedNavDisplay(
+            ownerKey = screenBackStackModel.mainScreen,
             backStack = backStack,
             modifier = modifier,
             onBack = {
@@ -542,6 +536,17 @@ private fun NavigationUI(
                             eventViewModel.sendEvent(
                                 EventViewModel.Event.Launch.Game(version)
                             )
+                        },
+                        onQuickPlayServer = { version, address ->
+                            val target = (version ?: VersionsManager.currentVersion.value)?.takeIf { it.isValid() }
+                            if (target != null) {
+                                eventViewModel.sendEvent(
+                                    EventViewModel.Event.Launch.PlayServer(target, address)
+                                )
+                            } else {
+                                eventViewModel.sendToast(androidText(R.string.game_launch_no_version))
+                                screenBackStackModel.mainScreen.navigateTo(NormalNavKey.VersionsManager)
+                            }
                         },
                         onOpenLink = {
                             eventViewModel.sendEvent(EventViewModel.Event.OpenLink(it))
@@ -664,11 +669,11 @@ private fun NavigationUI(
 
 @Composable
 private fun TaskMenu(
-    tasks: List<Task>,
     isExpanded: Boolean,
     modifier: Modifier = Modifier,
     changeExpandedState: () -> Unit = {}
 ) {
+    val tasks by TaskSystem.tasksFlow.collectAsStateWithLifecycle()
     val show = isExpanded && tasks.isNotEmpty()
 
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -730,7 +735,7 @@ private fun TaskMenu(
                         .weight(1f),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    items(tasks) { task ->
+                    items(tasks, key = { it.id }) { task ->
                         val taskProgress by task.progress.collectAsStateWithLifecycle()
                         val taskMessage by task.message.collectAsStateWithLifecycle()
                         val rateBytesPerSec by task.rateBytesPerSec.collectAsStateWithLifecycle()

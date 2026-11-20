@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -47,6 +46,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -66,6 +66,7 @@ import com.zalith.pcl.R
 import com.zalith.pcl.game.version.installed.Version
 import com.zalith.pcl.ui.components.LittleTextLabel
 import com.zalith.pcl.ui.screens.content.elements.VersionIconImage
+import com.zalith.pcl.ui.screens.content.home.CardIconShape
 
 /** 版本卡片启动回调 */
 val LocalHomeCardLauncher = staticCompositionLocalOf<(Version) -> Unit> { {} }
@@ -82,7 +83,6 @@ private val DetailItemGap = 2.dp
 /**
  * 版本卡片内容
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CardState.VersionCardContent(cardId: String) {
     val states by VersionCardManager.cards.collectAsStateWithLifecycle()
@@ -234,7 +234,9 @@ private fun TallContent(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     VersionIconImage(
-                        modifier = Modifier.size(iconSize),
+                        modifier = Modifier
+                            .size(iconSize)
+                            .clip(CardIconShape),
                         version = version
                     )
                     Column(
@@ -345,7 +347,9 @@ private fun RowContent(
         verticalAlignment = Alignment.CenterVertically
     ) {
         VersionIconImage(
-            modifier = Modifier.size(iconSize),
+            modifier = Modifier
+                .size(iconSize)
+                .clip(CardIconShape),
             version = version
         )
         CardTexts(
