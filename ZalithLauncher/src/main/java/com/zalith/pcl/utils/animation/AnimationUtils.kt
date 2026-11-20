@@ -71,6 +71,18 @@ fun <E> getAnimateTween(
     delayMillis = delayMillis
 )
 
+/**
+ * 进入动画的 tween：固定用 [EnterTranslateEasing]，时长跟「动画速度」走。
+ * 上游 2.8 新增（我们这边原先只有 swap / bounce 两套）。
+ */
+fun <E> getEnterTween(
+    delayMillis: Int = 0
+): FiniteAnimationSpec<E> = tween(
+    durationMillis = getAnimateSpeed(),
+    delayMillis = delayMillis,
+    easing = EnterTranslateEasing
+)
+
 fun <E> getAnimateTweenBounce(
     delayMillis: Int = 0
 ): FiniteAnimationSpec<E> = getAnimateTweenBounce(

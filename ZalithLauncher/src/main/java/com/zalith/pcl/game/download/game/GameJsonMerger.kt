@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -54,7 +54,8 @@ fun mergeGameJson(
     neoForgeFolder: File? = null,
     fabricFolder: File? = null,
     legacyFabricFolder: File? = null,
-    quiltFolder: File? = null
+    quiltFolder: File? = null,
+    cleanroomFolder: File? = null
 ) {
     Logger.info(TAG,
         "Start merge version json, output: $outputFolder, Minecraft: $clientFolder\n" +
@@ -63,7 +64,8 @@ fun mergeGameJson(
                 (if (neoForgeFolder != null) "，${ModLoader.NEOFORGE.displayName}: $neoForgeFolder" else "") +
                 (if (fabricFolder != null) "，${ModLoader.FABRIC.displayName}: $fabricFolder" else "") +
                 (if (legacyFabricFolder != null) "，${ModLoader.LEGACY_FABRIC.displayName}: $legacyFabricFolder" else "") +
-                (if (quiltFolder != null) "，${ModLoader.QUILT.displayName}: $quiltFolder" else "")
+                (if (quiltFolder != null) "，${ModLoader.QUILT.displayName}: $quiltFolder" else "") +
+                (if (cleanroomFolder != null) "，${ModLoader.CLEANROOM.displayName}: $cleanroomFolder" else "")
     )
 
     outputFolder.mkdirs()
@@ -80,6 +82,7 @@ fun mergeGameJson(
     val fabricJsonPath = fabricFolder.gameFileOrNull("json")
     val legacyFabricJsonPath = legacyFabricFolder.gameFileOrNull("json")
     val quiltJsonPath = quiltFolder.gameFileOrNull("json")
+    val cleanroomJsonPath = cleanroomFolder.gameFileOrNull("json")
 
     //读取和验证 Json
     val minecraftJson = minecraftJsonPath.getJsonOrNull("Minecraft")
@@ -93,13 +96,15 @@ fun mergeGameJson(
     val fabricJson = fabricJsonPath.getJsonOrNull(ModLoader.FABRIC.displayName)
     val legacyFabricJson = legacyFabricJsonPath.getJsonOrNull(ModLoader.LEGACY_FABRIC.displayName)
     val quiltJson = quiltJsonPath.getJsonOrNull(ModLoader.FABRIC.displayName)
+    val cleanroomJson = cleanroomJsonPath.getJsonOrNull(ModLoader.CLEANROOM.displayName)
 
     //处理 minecraftArguments
     val allArgs = listOfNotNull(
         minecraftJson.safeGetMinecraftArguments(),
         optiFineJson?.safeGetMinecraftArguments(),
         forgeJson?.safeGetMinecraftArguments(),
-        neoForgeJson?.safeGetMinecraftArguments()
+        neoForgeJson?.safeGetMinecraftArguments(),
+        cleanroomJson?.safeGetMinecraftArguments()
         //Fabric、Quilt没有这样的参数
     ).joinToString(" ")
 
@@ -117,7 +122,8 @@ fun mergeGameJson(
         optiFineJson,
         forgeJson, neoForgeJson,
         fabricJson, quiltJson,
-        legacyFabricJson
+        legacyFabricJson,
+        cleanroomJson
     ).forEach { json ->
         json.remove("releaseTime")
         json.remove("time")

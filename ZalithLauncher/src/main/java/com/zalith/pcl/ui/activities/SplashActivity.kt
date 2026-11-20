@@ -27,6 +27,9 @@
 
 package com.zalith.pcl.ui.activities
 
+import androidx.compose.runtime.remember
+import com.zalith.pcl.legal.AvailableAgreement
+import kotlinx.coroutines.flow.MutableStateFlow
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -159,6 +162,11 @@ class SplashActivity : BaseAppCompatActivity() {
                 ) {
                     SplashScreen(
                         startAllTask = { startAllTask() },
+                        // 上游 2.8 把「欢迎页 / 用户协议」的判断挪进了 SplashScreen，
+                        // 这两个参数由它自己驱动：欢迎页结束就直接开始解压；
+                        // 协议本身由条款页处理，这里给个空流即可。
+                        onWelcomeFinished = { startAllTask() },
+                        availableAgreement = remember { MutableStateFlow<AvailableAgreement?>(null) },
                         unpackItems = unpackItems,
                         screenViewModel = backStackViewModel,
                     )
@@ -220,6 +228,11 @@ class SplashActivity : BaseAppCompatActivity() {
                 ) {
                     SplashScreen(
                         startAllTask = { startAllTask() },
+                        // 上游 2.8 把「欢迎页 / 用户协议」的判断挪进了 SplashScreen，
+                        // 这两个参数由它自己驱动：欢迎页结束就直接开始解压；
+                        // 协议本身由条款页处理，这里给个空流即可。
+                        onWelcomeFinished = { startAllTask() },
+                        availableAgreement = remember { MutableStateFlow<AvailableAgreement?>(null) },
                         unpackItems = unpackItems,
                         screenViewModel = backStackViewModel,
                     )
@@ -250,7 +263,7 @@ class SplashActivity : BaseAppCompatActivity() {
     private fun initUnpackItems() {
         Components.entries.forEach { component ->
             val task = UnpackComponentsTask(this@SplashActivity, component)
-            if (!task.isCheckFailed()) {
+            run {
                 unpackItems.add(
                     InstallableItem(
                         component.displayName,
@@ -262,7 +275,7 @@ class SplashActivity : BaseAppCompatActivity() {
         }
         Jre.entries.forEach { jre ->
             val task = UnpackJreTask(this@SplashActivity, jre)
-            if (!task.isCheckFailed()) {
+            run {
                 unpackItems.add(
                     InstallableItem(
                         jre.jreName,
@@ -273,7 +286,7 @@ class SplashActivity : BaseAppCompatActivity() {
             }
         }
         val jnaTask = UnpackJnaTask(this@SplashActivity)
-        if (!jnaTask.isCheckFailed()) {
+        run {
             unpackItems.add(
                 InstallableItem(
                     "JNA",
@@ -291,11 +304,15 @@ class SplashActivity : BaseAppCompatActivity() {
             Logger.info(TAG, "The launcher contains the runtime environment: $filePath")
         }
 
-        unpackItems.forEach { item ->
-            val state = item.task.checkState()
-            item.updateState(state)
-            if (state == InstallableItem.State.FINISHED) {
-                finishedTaskCount.incrementAndGet()
+        // checkState() 在上游 2.8 改成了 suspend（要读 assets 清单做 SHA-1 校验），
+        // 所以放到 lifecycleScope 里跑；界面只依赖 item.state 的流，异步不影响首帧。
+        lifecycleScope.launch {
+            unpackItems.forEach { item ->
+                val state = item.task.checkState()
+                item.updateState(state)
+                if (state == InstallableItem.State.FINISHED) {
+                    finishedTaskCount.incrementAndGet()
+                }
             }
         }
     }
@@ -781,7 +798,7 @@ private class MobileGluesInstallTask(
 ) : AbstractUnpackTask() {
     private val appContext = context.applicationContext
 
-    override fun checkState(): InstallableItem.State =
+    override suspend fun checkState(): InstallableItem.State =
         if (runCatching {
                 appContext.packageManager.getPackageInfo("com.fcl.plugin.mobileglues", 0)
                 true

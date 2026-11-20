@@ -770,7 +770,7 @@ class PclRuntime(
             context = activity,
             version = version,
             exitActivity = { activity.finish() },
-            submitError = { tm -> pendingError = tm },
+            onError = { tm -> pendingError = tm },
             onReloginRequired = { acc ->
                 pendingError = ErrorViewModel.ThrowableMessage(
                     title = androidText("账号需要重新登录"),

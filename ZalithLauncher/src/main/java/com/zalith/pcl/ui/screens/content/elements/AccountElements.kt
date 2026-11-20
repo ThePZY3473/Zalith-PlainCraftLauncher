@@ -136,6 +136,9 @@ import com.zalith.pcl.path.PathManager
 import com.zalith.pcl.path.URL_MINECRAFT_PURCHASE
 import com.zalith.pcl.ui.AndroidStringText
 import com.zalith.pcl.ui.androidText
+import com.zalith.pcl.ui.components.ButtonPosition
+import com.zalith.pcl.ui.components.PositionButton
+import com.zalith.pcl.ui.components.PositionFilledTonalButton
 import com.zalith.pcl.ui.components.BaseIconTextButton
 import com.zalith.pcl.ui.components.IconTextButton
 import com.zalith.pcl.ui.components.ImePanContainer
@@ -1254,13 +1257,37 @@ sealed interface ChangeSkin {
 
     data class ChangeSkinData(
         val cacheFile: File,
-        val skinModel: SkinModelType = SkinModelType.STEVE
+        /**
+         * 预览用的模型（上游 2.8 起用 [SkinModel]）：
+         * `Rejected` 表示这张皮肤是经典（非双层）皮肤、不需要选粗细臂，
+         * 沿用账号当前模型即可，不去强行改成 Steve。
+         */
+        val data: SkinModel = SkinModel.Model(SkinModelType.STEVE)
     ) : ChangeSkin
 
     /**
      * 重置离线皮肤
      */
     data object ResetSkin : ChangeSkin
+
+    /** 皮肤模型（上游 2.8 新增：把「拒绝/选定」也建模，避免用 null 表示） */
+    sealed interface SkinModel {
+        /** 不需要/放弃指定模型（如经典皮肤没有粗细臂之分） */
+        data object Rejected : SkinModel
+        data class Model(val model: SkinModelType) : SkinModel
+
+        /** @return 模型类型，未指定时回落到 Steve */
+        fun getModelType(): SkinModelType = when (this) {
+            is Rejected -> SkinModelType.STEVE
+            is Model -> model
+        }
+
+        /** @return 模型类型，未指定时为 null（用来禁用粗细臂单选框） */
+        fun getModelTypeNullable(): SkinModelType? = when (this) {
+            is Rejected -> null
+            is Model -> model
+        }
+    }
 }
 
 /**
@@ -1410,12 +1437,12 @@ fun ChangeSkinDialog(
                                             is ChangeSkin.ChangeSkinData -> {
                                                 runCatching {
                                                     skinState.cacheFile.inputStream().use { stream ->
-                                                        playerSkin.loadSkin(stream, skinState.skinModel)
+                                                        playerSkin.loadSkin(stream, skinState.data.getModelType())
                                                     }
                                                 }.onFailure {
                                                     playerSkin.loadSkin(
                                                         skinId = null,
-                                                        skinState.skinModel
+                                                        skinState.data.getModelType()
                                                     )
                                                 }
                                             }
@@ -1481,24 +1508,26 @@ fun ChangeSkinDialog(
                                         ) {
                                             //粗臂
                                             RadioCard(
-                                                selected = skinState.skinModel == SkinModelType.STEVE,
+                                                selected = skinState.data.getModelTypeNullable() == SkinModelType.STEVE,
+                                                enabled = skinState.data !is ChangeSkin.SkinModel.Rejected,
                                                 text = stringResource(R.string.account_change_skin_arm_wide),
                                                 onClick = {
                                                     onSkinStateChange(
                                                         skinState.copy(
-                                                            skinModel = SkinModelType.STEVE
+                                                            data = ChangeSkin.SkinModel.Model(SkinModelType.STEVE)
                                                         )
                                                     )
                                                 }
                                             )
                                             //细臂
                                             RadioCard(
-                                                selected = skinState.skinModel == SkinModelType.ALEX,
+                                                selected = skinState.data.getModelTypeNullable() == SkinModelType.ALEX,
+                                                enabled = skinState.data !is ChangeSkin.SkinModel.Rejected,
                                                 text = stringResource(R.string.account_change_skin_arm_slim),
                                                 onClick = {
                                                     onSkinStateChange(
                                                         skinState.copy(
-                                                            skinModel = SkinModelType.ALEX
+                                                            data = ChangeSkin.SkinModel.Model(SkinModelType.ALEX)
                                                         )
                                                     )
                                                 }
@@ -1575,7 +1604,7 @@ fun ChangeSkinDialog(
                             onClick = {
                                 when (skinState) {
                                     is ChangeSkin.ChangeSkinData -> {
-                                        onApplySkin(skinState.cacheFile, skinState.skinModel)
+                                        onApplySkin(skinState.cacheFile, skinState.data.getModelType())
                                     }
 
                                     is ChangeSkin.ResetSkin -> {
@@ -1845,4 +1874,76 @@ private fun getSkinAvatar(
         avatarPaint
     )
     return avatar
+}
+
+@Composable
+fun MicrosoftLoginMethodDialog(
+    onDismissRequest: () -> Unit,
+    onSystemBrowser: () -> Unit,
+    onInternalBrowser: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .heightIn(max = rememberDialogMaxHeight())
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .padding(all = 6.dp)
+                    .heightIn(max = (maxHeight - 12.dp).coerceAtMost(rememberDialogMaxHeight()))
+                    .wrapContentHeight(),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = cardColor(false),
+                contentColor = onCardColor(),
+                shadowElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(all = 16.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.account_supporting_microsoft_tip_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = stringResource(R.string.account_microsoft_login_method_summary),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        PositionButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            position = ButtonPosition.Top,
+                            onClick = onSystemBrowser
+                        ) {
+                            MarqueeText(text = stringResource(R.string.account_microsoft_login_method_system_browser))
+                        }
+                        PositionFilledTonalButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            position = ButtonPosition.Middle,
+                            onClick = onInternalBrowser
+                        ) {
+                            MarqueeText(text = stringResource(R.string.account_microsoft_login_method_internal_browser))
+                        }
+                        PositionFilledTonalButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            position = ButtonPosition.Bottom,
+                            onClick = onDismissRequest
+                        ) {
+                            MarqueeText(text = stringResource(R.string.generic_cancel))
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

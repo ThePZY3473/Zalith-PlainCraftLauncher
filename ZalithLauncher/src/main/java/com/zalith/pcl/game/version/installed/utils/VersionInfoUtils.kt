@@ -24,6 +24,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.zalith.pcl.game.addons.modloader.ModLoader
 import com.zalith.pcl.game.version.installed.VersionInfo
+import com.zalith.pcl.game.versioninfo.models.checkVersionType
 import com.zalith.pcl.utils.logging.Logger
 import com.zalith.pcl.utils.string.isNotEmptyOrBlank
 import java.io.File
@@ -84,11 +85,26 @@ fun parseJsonToVersionInfo(jsonFile: File): VersionInfo? {
             )
         }
         val (versionId, loaderInfos) = detectMinecraftAndLoader(jsonObject)
-        VersionInfo(versionId, quickPlay, loaderInfos)
+        // 上游 2.8 给 VersionInfo 加了版本类型（正式/快照/愚人节…），
+        // 从版本 json 的 type 字段读，读不到再按版本号猜（愚人节版只能靠表匹配）。
+        val type = detectMinecraftType(jsonObject)
+        VersionInfo(
+            minecraftVersion = versionId,
+            quickPlay = quickPlay,
+            loaderInfos = loaderInfos,
+            type = checkVersionType(versionId, type)
+        )
     }.getOrElse {
         Logger.error(TAG, "Error parsing version json", it)
         null
     }
+}
+
+private fun detectMinecraftType(versionJson: JsonObject): String? {
+    return versionJson.takeIf { it.has("type") }
+        ?.get("type")
+        ?.takeIf(JsonElement::isJsonPrimitive)
+        ?.asString
 }
 
 /**

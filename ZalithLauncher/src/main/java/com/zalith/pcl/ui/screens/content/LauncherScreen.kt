@@ -100,6 +100,7 @@ import com.zalith.pcl.ui.screens.content.home.actionMenuDragAnchor
 import com.zalith.pcl.ui.screens.content.home.actionMenuDragExclusion
 import com.zalith.pcl.ui.screens.content.home.rememberActionMenuDragState
 import com.zalith.pcl.ui.screens.content.home.version.LocalHomeCardLauncher
+import com.zalith.pcl.ui.screens.content.home.server.LocalServerCardQuickPlay
 import com.zalith.pcl.ui.screens.content.home.version.LocalHomeCardVersionSettings
 import com.zalith.pcl.utils.animation.swapAnimateDpAsState
 import com.zalith.pcl.viewmodel.ScreenBackStackViewModel
@@ -118,6 +119,8 @@ fun LauncherScreen(
     backStackViewModel: ScreenBackStackViewModel,
     navigateToVersions: (Version) -> Unit,
     onLaunchGame: (Version?) -> Unit,
+    // 服务器卡片的「直接进服」：version 为 null 表示用当前选中的版本
+    onQuickPlayServer: (Version?, String) -> Unit,
     onOpenLink: (String) -> Unit,
     startGuideOnce: (GuideKeys.Keys) -> Unit,
 ) {
@@ -205,6 +208,7 @@ fun LauncherScreen(
                         onLaunchGame = { version ->
                             onLaunchGame(version)
                         },
+                        onQuickPlayServer = onQuickPlayServer,
                         onOpenVersionSettings = navigateToVersions
                     )
                 }
@@ -252,6 +256,7 @@ fun LauncherScreen(
 private fun ContentMenu(
     isVisible: Boolean,
     onLaunchGame: (Version) -> Unit,
+    onQuickPlayServer: (Version?, String) -> Unit,
     onOpenVersionSettings: (Version) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -263,10 +268,13 @@ private fun ContentMenu(
 
     CompositionLocalProvider(
         LocalHomeCardLauncher provides onLaunchGame,
-        LocalHomeCardVersionSettings provides onOpenVersionSettings
+        LocalHomeCardVersionSettings provides onOpenVersionSettings,
+        LocalServerCardQuickPlay provides onQuickPlayServer
     ) {
         HomeGrid(
             state = gridState,
+            // 上游 2.8 的 HomeGrid 需要知道自己能见度，用来决定卡片入场动画是否播放
+            isVisible = isVisible,
             modifier = modifier
                 .fillMaxSize()
                 .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }

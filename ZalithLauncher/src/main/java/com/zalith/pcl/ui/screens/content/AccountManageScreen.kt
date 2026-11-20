@@ -236,7 +236,8 @@ private fun AccountManageContent(
                 .padding(all = 12.dp)
                 .weight(3f),
             currentAccount = profileUiState.currentAccount,
-            isOffline = profileUiState.isOffline,
+            // 上游 2.8 的 ProfileUiState 去掉了 isOffline；没有账号即视为离线模式
+            isOffline = profileUiState.accounts.isEmpty(),
             actions = actions
         )
 
@@ -248,7 +249,8 @@ private fun AccountManageContent(
                 .weight(7f),
             accounts = profileUiState.accounts,
             currentAccount = profileUiState.currentAccount,
-            isOffline = profileUiState.isOffline,
+            // 上游 2.8 的 ProfileUiState 去掉了 isOffline；没有账号即视为离线模式
+            isOffline = profileUiState.accounts.isEmpty(),
             accountOperation = operationUiState.accountOp,
             accountSkinOperation = operationUiState.accountSkinOp,
             accountSkinDialogState = operationUiState.accountSkinDialogState,
@@ -396,7 +398,10 @@ private fun MicrosoftLoginOperation(
                     )
                     actions.onIntent(
                         AccountManageIntent.PerformMicrosoftLogin(
+                            // 设备码登录默认走内置浏览器；系统浏览器作为可选通道保留
+                            useSystemBrowser = false,
                             toWeb = actions.navigateToWeb,
+                            toSystemBrowser = actions.openLink,
                             backToMain = actions.backToMainScreen,
                             checkIfInWebScreen = actions.checkIfInWebScreen
                         )
@@ -816,7 +821,9 @@ private fun AccountOperation(
                         actions.onIntent(AccountManageIntent.UpdateAccountOp(AccountOperation.None))
                         actions.onIntent(
                             AccountManageIntent.PerformMicrosoftLogin(
+                                useSystemBrowser = false,
                                 toWeb = actions.navigateToWeb,
+                                toSystemBrowser = actions.openLink,
                                 backToMain = actions.backToMainScreen,
                                 checkIfInWebScreen = actions.checkIfInWebScreen
                             )

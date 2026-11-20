@@ -584,7 +584,7 @@ class AccountManageViewModel @AssistedInject constructor(
                         cacheAllCapes(profile)
                         //同时更新本地的皮肤/披风
                         runCatching {
-                            account.downloadYggdrasil(refresh = false)
+                            account.downloadYggdrasil()
                         }.onFailure { e ->
                             if (e is CancellationException) throw e
                         }

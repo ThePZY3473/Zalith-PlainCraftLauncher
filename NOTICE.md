@@ -3,8 +3,9 @@
 本仓库是 **Zalith Launcher 2** 的修改版，按 GNU 通用公共许可证第 3 版（GPLv3）分发。
 
 - **本版本名称**：ZPCL Launcher
-- **本版本版本号**：1.5.4（versionCode 200076）
+- **本版本版本号**：1.5.4（versionCode 200081）
 - **上游项目**：Zalith Launcher 2 — <https://github.com/ZalithLauncher/ZalithLauncher2>
+- **上游源码基线**：2.8.1（2026-11 合并；此前基线为 2.6.1）
 - **上游版权**：Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
 - **本仓库**：<https://github.com/zuanxu53-hub/ZPCL-Launcher>
 - **许可证**：GPLv3，全文见 [LICENSE](LICENSE)
@@ -22,6 +23,12 @@
 | 启动 | 多渲染器选择与自动兼容、启动参数、日志收集 |
 | 扩展 | 插件机制（皮肤 / 自带界面插件）、页面 JSON 协议 |
 | 修复 | 导航栈、弹窗裁切、整合包导入竞态、导出规则正则崩溃等 |
+| 保留 | 上游 2.8 已移除的 Cleanroom 模组加载器支持（`ModLoader.CLEANROOM` 及其下载/启动链路） |
+
+**与上游 2.8.1 的差异说明**：本版是以 2.6.1 为基线、合并上游 2.8.1 改动后的分支。
+上游 2.8 新增的 `PetLib`（Rust 原生 3D 皮肤预览模块）**未包含**在本版中，
+因此本版没有「3D 皮肤预览」功能，账号界面沿用 2.x 原有的 2D 皮肤预览。
+其余上游改动（下载器、整合包、账号、渲染器配置模型等）均已合并。
 
 逐文件的修改历史见本仓库的 git 记录；每个被修改过的源文件都在文件头保留了上游版权声明与本项目说明。
 

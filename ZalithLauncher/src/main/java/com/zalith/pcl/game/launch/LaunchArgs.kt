@@ -320,7 +320,8 @@ class LaunchArgs(
      * [Modified from PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher/blob/a6f3fc0/app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/Tools.java#L871-L882)
      */
     private fun generateLibClasspath(gameManifest: GameManifest): Array<String> {
-        val libSortFix = LibSortFix()
+        // 本分支的 LibSortFix 需要版本信息来判断是不是 Cleanroom（它的库命名和原版不同）
+        val libSortFix = LibSortFix(version.getVersionInfo())
         val libs = LinkedHashMap<GameManifest.Library, String>()
 
         for (libItem in gameManifest.libraries) {

@@ -652,8 +652,8 @@ fun PclInstanceExportPage(version: Version) {
                     mcVersion = info?.minecraftVersion ?: "",
                     loader = loader,
                     selectedFiles = files,
+                    // ExportInfo 只有 minMemory 一个内存字段（整合包规范里也只有下限）
                     minMemory = 1024,
-                    maxMemory = version.getRamAllocation(context),
                     packType = if (advancedModrinth) PackType.Modrinth else PackType.CurseForge,
                     // 「打包资源文件」= 不再联网取远程资源（对应 PCL 的同名开关）
                     packModrinth = !advancedEmbed,

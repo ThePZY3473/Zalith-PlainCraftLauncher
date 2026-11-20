@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@ package com.zalith.pcl.game.version.installed
 import android.os.Parcelable
 import androidx.annotation.Keep
 import com.zalith.pcl.game.addons.modloader.ModLoader
+import com.zalith.pcl.game.versioninfo.MinecraftVersion
 import kotlinx.parcelize.Parcelize
 
 @Keep
@@ -28,7 +29,8 @@ import kotlinx.parcelize.Parcelize
 class VersionInfo(
     val minecraftVersion: String,
     val quickPlay: QuickPlay,
-    val loaderInfos: List<LoaderInfo>
+    val loaderInfos: List<LoaderInfo>,
+    val type: MinecraftVersion.Type,
 ): Parcelable {
     /**
      * 主加载器
@@ -91,6 +93,7 @@ class VersionInfo(
                 ModLoader.OPTIFINE -> "INST_OPTIFINE"
                 ModLoader.FORGE -> "INST_FORGE"
                 ModLoader.NEOFORGE -> "INST_NEOFORGE"
+                ModLoader.CLEANROOM -> "INST_CLEANROOM"
 
                 ModLoader.FABRIC,
                 ModLoader.LEGACY_FABRIC,
@@ -99,7 +102,6 @@ class VersionInfo(
 
                 ModLoader.QUILT -> "INST_QUILT"
                 ModLoader.LITE_LOADER -> "INST_LITELOADER"
-                ModLoader.CLEANROOM -> "INST_CLEANROOM"
                 else -> null
             }
         }

@@ -34,6 +34,7 @@
 
 package com.zalith.pcl.ui.pcl2.pages
 
+import org.jackhuang.hmcl.addon.AddonProjectInfo
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -75,9 +76,7 @@ import com.zalith.pcl.game.download.assets.downloadSingleForVersions
 import com.zalith.pcl.game.download.assets.platform.getProjectByVersion
 import com.zalith.pcl.game.download.assets.platform.getVersions
 import com.zalith.pcl.ui.screens.content.download.assets.elements.initAll
-import com.zalith.pcl.game.download.assets.utils.ModTranslations
 import com.zalith.pcl.game.download.assets.utils.getMcmodTitle
-import com.zalith.pcl.game.download.assets.utils.getMcmodTranslations
 import com.zalith.pcl.game.download.modpack.install.ModpackImporter
 import com.zalith.pcl.ui.pcl2.PclContent
 import com.zalith.pcl.ui.pcl2.PclHintHost
@@ -121,7 +120,7 @@ import com.zalith.pcl.utils.file.formatFileSize
 /** `PageDownloadResourceDetail` —— 资源详情页。 */
 fun pclResourceDetailPage(
     data: PlatformSearchData,
-    mcmod: ModTranslations.McMod?,
+    mcmod: AddonProjectInfo?,
     classes: PlatformClasses,
     /**
      * 进来后要直接定位到的文件版本 Id。
@@ -146,7 +145,7 @@ fun pclResourceDetailPage(
 @Composable
 private fun PclResourceDetail(
     data: PlatformSearchData,
-    mcmod: ModTranslations.McMod?,
+    mcmod: AddonProjectInfo?,
     classes: PlatformClasses,
     focusVersionId: String? = null,
 ) {
@@ -412,7 +411,9 @@ private fun PclResourceDetail(
                 // 而 class/248 = 矿物追踪）。以前这里写死了 `class/`，于是整合包详情
                 // 点「转到 MC 百科」全都会跳到同号的某个 Mod 上。
                 mcmod?.let { m ->
-                    val mcmodUrl = classes.getMcmodTranslations().getMcmodUrl(m)
+                    // 上游 2.8 换成了 HMCL 的 AddonProjectInfo：它自己按 class/ 或 modpack/
+                    // 的类别拼好地址（两套编号互不相通，以前我们这边手写过前缀）。
+                    val mcmodUrl = m.mcmodUrl().orEmpty()
                     if (mcmodUrl.isNotBlank()) {
                         PclButton(
                             text = "转到 MC 百科",

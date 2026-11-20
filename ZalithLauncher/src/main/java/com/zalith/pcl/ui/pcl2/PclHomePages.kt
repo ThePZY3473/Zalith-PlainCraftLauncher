@@ -132,6 +132,7 @@ import com.zalith.pcl.game.account.isMicrosoftAccount
 import com.zalith.pcl.game.account.isMicrosoftLogging
 import com.zalith.pcl.game.account.microsoftLogin
 import com.zalith.pcl.game.account.wardrobe.SkinModelType
+import com.zalith.pcl.game.account.wardrobe.SkinType
 import com.zalith.pcl.game.account.wardrobe.getLocalUUIDWithSkinModel
 import com.zalith.pcl.game.version.installed.Version
 import com.zalith.pcl.game.version.installed.VersionLoginType
@@ -767,6 +768,8 @@ private fun startMicrosoftLogin(runtime: PclRuntime, context: android.content.Co
     }
     microsoftLogin(
         context = runtime.activity,
+        useSystemBrowser = false,
+        toSystemBrowser = { url -> openLink(runtime.activity, url) },
         toWeb = { url ->
             // 微软的设备码登录页在 WebView 里经常在授权完成后停在白屏，刷新还会把
             // 一次性会话刷成「我们无法满足你的需求」。设备码流程本身与浏览器无关
@@ -904,7 +907,8 @@ private fun rememberSkinImporter(
                         true
                     } ?: false
                     if (!opened) return@runCatching null
-                    if (!validateSkinFile(temp)) return@runCatching null
+                    // 上游 2.8 起 validateSkinFile 返回 SkinType 枚举，Invalid 才是不合法
+                    if (validateSkinFile(temp) == SkinType.Invalid) return@runCatching null
                     PendingSkinImport(account, temp) to temp.isSlimModel()
                 }.getOrNull()
             }

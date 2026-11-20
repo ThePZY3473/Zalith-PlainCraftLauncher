@@ -32,6 +32,7 @@
 
 package com.zalith.pcl.ui.pcl2
 
+import org.jackhuang.hmcl.addon.AddonProjectInfo
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -215,7 +216,6 @@ import com.zalith.pcl.game.download.assets.platform.modrinth.models.ModrinthModp
 import com.zalith.pcl.game.download.assets.platform.modrinth.models.ModrinthResourcePackCategory
 import com.zalith.pcl.game.download.assets.platform.modrinth.models.ModrinthShadersCategory
 import com.zalith.pcl.game.download.assets.platform.modrinth.models.modrinthModLoaderFilters
-import com.zalith.pcl.game.download.assets.utils.ModTranslations
 import com.zalith.pcl.game.download.assets.utils.getMcmodTitle
 import com.zalith.pcl.setting.AllSettings
 import com.zalith.pcl.setting.enums.MirrorSourceType
@@ -1835,7 +1835,7 @@ private fun PlatformSearchFilter.pclForPlatform(
 
 /** 合并后的搜索结果（来源选「全部」时把两个平台的当前页拼在一起）。 */
 private class PclAssetPage(
-    val data: List<Pair<PlatformSearchData, ModTranslations.McMod?>>,
+    val data: List<Pair<PlatformSearchData, AddonProjectInfo?>>,
     val pageNumber: Int,
     val totalPage: Int,
     val isLastPage: Boolean,
