@@ -62,6 +62,11 @@ android {
         }
     }
 
+    // 项目签名文件只保存在发布者本机（已被 .gitignore 排除）。公开源码或 CI 上拿不到它时，
+    // 必须还能完成编译：Debug 退回 Android 默认调试签名，Release 输出未签名包。
+    // 否则 `validateSigning` 会在打包阶段直接失败，表现为「本地能编、CI 全红」。
+    val localKeystore = file("zpcl_release.jks")
+
     signingConfigs {
         // 2026-11 换了新密钥：旧的 `zalith_launcher.jks` 曾随源码提交进公开仓库
         // （连同 gradle.properties 里的明文密码），等于私钥已公开 —— 任何人都能签出
@@ -70,26 +75,30 @@ android {
         //
         // 换签名后无法覆盖旧签名的安装包，必须卸载重装；换包名（com.zpcl.launcher）时
         // 一并换掉正好把这次代价省了。
-        create("releaseBuild") {
-            storeFile = file("zpcl_release.jks")
-            storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
-            keyAlias = "zpcl"
-            keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
-            //同时启用 v1(JAR) / v2 / v3 签名，提升对旧版系统安装器的兼容性
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
-        }
-        create("debugBuild") {
-            // debug 也走新密钥：旧 debug 私钥同样在公开仓库里，没必要留着。
-            storeFile = file("zpcl_release.jks")
-            storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
-            keyAlias = "zpcl"
-            keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
-            //同时启用 v1(JAR) / v2 / v3 签名，提升对旧版系统安装器的兼容性
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
+        if (localKeystore.exists()) {
+            create("releaseBuild") {
+                storeFile = localKeystore
+                storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
+                keyAlias = "zpcl"
+                keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+                //同时启用 v1(JAR) / v2 / v3 签名，提升对旧版系统安装器的兼容性
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+            create("debugBuild") {
+                // debug 也走新密钥：旧 debug 私钥同样在公开仓库里，没必要留着。
+                storeFile = localKeystore
+                storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
+                keyAlias = "zpcl"
+                keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+                //同时启用 v1(JAR) / v2 / v3 签名，提升对旧版系统安装器的兼容性
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        } else {
+            logger.lifecycle("BUILD: zpcl_release.jks not found; falling back to default debug signing / unsigned release.")
         }
     }
 
@@ -109,7 +118,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("releaseBuild")
+            signingConfig = signingConfigs.findByName("releaseBuild")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -119,7 +128,8 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            signingConfig = signingConfigs.getByName("debugBuild")
+            // 没有项目签名文件时不指定签名配置，AGP 会自动使用默认调试签名。
+            signingConfigs.findByName("debugBuild")?.let { signingConfig = it }
         }
     }
 

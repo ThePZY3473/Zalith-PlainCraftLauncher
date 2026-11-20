@@ -9,7 +9,7 @@
 | `ZalithLauncher/libs/MobileGlues-release.aar` | Copyright © 2025–2026 MobileGL-Dev；GNU LGPL 2.1 | [源码](https://github.com/MobileGL-Dev/MobileGlues) · [许可证正文](https://github.com/MobileGL-Dev/MobileGlues/blob/main/LICENSE) · [上游列出的第三方组件](https://github.com/MobileGL-Dev/MobileGlues#third-party-components) |
 | `ZalithLauncher/libs/SimpleFPEWrapper-release.aar` | Copyright © 2026 MobileGL-Dev；GNU LGPL 3.0 | [源码](https://github.com/MobileGL-Dev/SimpleFPEWrapper) · [许可证声明](https://github.com/MobileGL-Dev/SimpleFPEWrapper/blob/main/LICENSE) · [COPYING](https://github.com/MobileGL-Dev/SimpleFPEWrapper/blob/main/COPYING) · [COPYING.LESSER](https://github.com/MobileGL-Dev/SimpleFPEWrapper/blob/main/COPYING.LESSER) |
 
-上述文件名不含组件版本；此处的署名对照 Zalith Launcher 2.8.1 的清单与组件上游声明整理，链接仅用于定位项目，**尚未确认每个 AAR 对应的确切源码标签或提交**。分发这些预编译件或包含它们的 APK 前，应记录各二进制对应的版本或提交及构建来源，并按适用许可保留版权和许可文本、提供所需的对应源码，以及适用的替换或重新链接说明。仓库中的其他预编译依赖（例如 JNA 原生库、运行时归档）也需要按实际分发内容核对。
+上述预编译件与 Zalith Launcher 2.8.1 源码包中同名文件**逐字节一致**（SHA-256 前 16 位：MobileGlues `6ca24a8afd5312b4`，SimpleFPEWrapper `2b6e7d24e91786ae`），即直接沿用上游 2.8.1 随源码提供的二进制，本项目未自行编译。上游未写明它们编译自组件仓库的哪个标签或提交，因此**确切源码版本仍属未知**。分发这些预编译件或包含它们的 APK 前，应向上游或组件仓库确认对应版本并记录，同时保留版权与许可文本、提供所需的对应源码及适用的替换或重新链接说明。仓库中的其他预编译依赖（例如 JNA 原生库、运行时归档）同样按实际分发内容核对。
 
 ## 其他组件
 
