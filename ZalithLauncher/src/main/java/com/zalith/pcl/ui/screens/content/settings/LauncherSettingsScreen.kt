@@ -60,6 +60,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import android.content.Intent
+import com.zalith.pcl.ui.activities.Pcl2Activity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -150,6 +152,37 @@ fun LauncherSettingsScreen(
                 .padding(all = 12.dp),
             isVisible = isVisible
         ) {
+            // PCL2 界面入口。
+            // 应用只保留一个桌面图标（SplashActivity），进来之后由「使用 PCL2 风格界面作为主界面」
+            // 这个开关决定落在哪一边；所以关掉开关之后，原生界面里必须留一条随时能回去的路。
+            // 上游 2.8 的 `LauncherSettingsScreen` 没有这一段（是我们自己加的），
+            // 2026-11-20 合并上游时被整文件覆盖冲掉过一次，别再删。
+            AnimatedItem { ctx ->
+                SettingsCardColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animated(ctx)
+                ) {
+                    SettingsCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        position = CardPosition.Single,
+                        title = stringResource(R.string.settings_launcher_switch_pcl2_title),
+                        summary = stringResource(R.string.settings_launcher_switch_pcl2_summary),
+                        trailingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_keyboard_arrow_right),
+                                contentDescription = null
+                            )
+                        },
+                        onClick = {
+                            // 顺手把「主界面」也设成 PCL2 界面，免得下次从桌面图标进来又回到这边
+                            AllSettings.usePcl2Ui.save(true)
+                            context.startActivity(Intent(context, Pcl2Activity::class.java))
+                        }
+                    )
+                }
+            }
+
             AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
