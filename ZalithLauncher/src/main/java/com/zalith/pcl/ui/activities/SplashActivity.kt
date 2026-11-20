@@ -67,6 +67,8 @@ import com.zalith.pcl.game.download.engine.SegmentedDownloader
 import com.zalith.pcl.setting.AllSettings
 import com.zalith.pcl.ui.base.BaseAppCompatActivity
 import com.zalith.pcl.ui.pcl2.components.PclConfirmDialog
+import com.zalith.pcl.ui.screens.navigateOnce
+import com.zalith.pcl.ui.screens.splash.SplashOperation
 import com.zalith.pcl.ui.screens.splash.SplashScreen
 import com.zalith.pcl.ui.theme.ZalithLauncherTheme
 import com.zalith.pcl.ui.theme.backgroundColor
@@ -125,6 +127,23 @@ class SplashActivity : BaseAppCompatActivity() {
 
     private val backStackViewModel: SplashBackStackViewModel by viewModels()
 
+    /**
+     * 切到启动流程里的某一屏。
+     *
+     * 上游 2.8 把「解析压」的导航从 `NestedNavKey.Splash` 的初始栈挪到了这里：
+     * `SplashScreen` 只按当前 backStack 渲染 `SplashOperation`，自己不推进。
+     * 不在这里推的话，界面会永远停在 `Loading`（转圈那屏）—— 2026-11-20 就踩过。
+     */
+    private fun switchScreen(screen: SplashOperation) {
+        backStackViewModel.splashScreen.backStack.navigateOnce(screen)
+    }
+
+    /** 检查完毕后的去向：装好了就直接进主界面，否则停在解压页等用户点「同意并安装」。 */
+    private fun showUnpackOrMain() {
+        if (checkTasksToMain()) return
+        switchScreen(SplashOperation.Unpacking)
+    }
+
     companion object {
         private const val KEY_MG_DECLINED = "mobileglues_declined"
     }
@@ -144,7 +163,6 @@ class SplashActivity : BaseAppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         initUnpackItems()
-        checkAllTask()
 
         // 每次启动都重新查一遍有没有装：装了就不再问；
         // 没装的话，只有用户明确点过「不安装」才永久闭嘴。
@@ -152,7 +170,6 @@ class SplashActivity : BaseAppCompatActivity() {
         val prefs = getSharedPreferences("pcl2.mobileglues", MODE_PRIVATE)
         askMobileGlues = !isMobileGluesInstalled() && !prefs.getBoolean(KEY_MG_DECLINED, false)
 
-        if (!askMobileGlues && checkTasksToMain()) return
         setContent {
             ZalithLauncherTheme {
                 Surface(
@@ -187,6 +204,16 @@ class SplashActivity : BaseAppCompatActivity() {
                 )
             }
         }
+
+        // 先把界面挂上（Loading 屏），再在后台查各组件是否已就绪。
+        // 查完决定去向：全都装好 → 主界面；还有东西要解压 → 解压页。
+        // 要问 MobileGlues 就先停在这儿，等用户在对话框里选完再走。
+        lifecycleScope.launch {
+            switchScreen(SplashOperation.Loading)
+            checkAllTask()
+            if (askMobileGlues) return@launch
+            showUnpackOrMain()
+        }
     }
 
     /** 每次启动都查一遍，别缓存：用户可能刚刚卸载了插件。 */
@@ -208,37 +235,8 @@ class SplashActivity : BaseAppCompatActivity() {
             .apply()
         askMobileGlues = false
         if (install) addMobileGluesItem()
-        if (checkTasksToMain()) return
-    }
-
-    /** 询问结束（或无需询问）后再检查解压状态、挂载界面。 */
-    private fun startSplashUi() {
-        checkAllTask()
-
-        if (checkTasksToMain()) {
-            return
-        }
-
-        setContent {
-            ZalithLauncherTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = backgroundColor(),
-                    contentColor = onBackgroundColor()
-                ) {
-                    SplashScreen(
-                        startAllTask = { startAllTask() },
-                        // 上游 2.8 把「欢迎页 / 用户协议」的判断挪进了 SplashScreen，
-                        // 这两个参数由它自己驱动：欢迎页结束就直接开始解压；
-                        // 协议本身由条款页处理，这里给个空流即可。
-                        onWelcomeFinished = { startAllTask() },
-                        availableAgreement = remember { MutableStateFlow<AvailableAgreement?>(null) },
-                        unpackItems = unpackItems,
-                        screenViewModel = backStackViewModel,
-                    )
-                }
-            }
-        }
+        // 检查在弹框之前就跑完了，这里只负责决定去向
+        showUnpackOrMain()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -298,21 +296,20 @@ class SplashActivity : BaseAppCompatActivity() {
         unpackItems.sort()
     }
 
-    private fun checkAllTask() {
+    private suspend fun checkAllTask() {
         //检查应用 assets 目录
         listAssetsPath("runtimes").forEach { filePath ->
             Logger.info(TAG, "The launcher contains the runtime environment: $filePath")
         }
 
-        // checkState() 在上游 2.8 改成了 suspend（要读 assets 清单做 SHA-1 校验），
-        // 所以放到 lifecycleScope 里跑；界面只依赖 item.state 的流，异步不影响首帧。
-        lifecycleScope.launch {
-            unpackItems.forEach { item ->
-                val state = item.task.checkState()
-                item.updateState(state)
-                if (state == InstallableItem.State.FINISHED) {
-                    finishedTaskCount.incrementAndGet()
-                }
+        // checkState() 在上游 2.8 改成了 suspend（要读 assets 清单做 SHA-1 校验）。
+        // 调用方必须**等它跑完**再判断去主界面还是解压页，否则刚启动时所有项都还是
+        // NOT_STARTED，checkTasksToMain() 永远返回 false。
+        unpackItems.forEach { item ->
+            val state = item.task.checkState()
+            item.updateState(state)
+            if (state == InstallableItem.State.FINISHED) {
+                finishedTaskCount.incrementAndGet()
             }
         }
     }
@@ -344,6 +341,7 @@ class SplashActivity : BaseAppCompatActivity() {
     private fun startAllTask() {
         // 界面上只有一个「同意并安装」按钮，重复点也只跑一次
         if (!taskStarted.compareAndSet(false, true)) return
+        switchScreen(SplashOperation.Unpacking)
 
         lifecycleScope.launch {
             val jobs = unpackItems

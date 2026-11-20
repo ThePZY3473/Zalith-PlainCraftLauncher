@@ -1,6 +1,15 @@
 /*
+ * ZPCL Launcher —— Zalith Launcher 2 的修改版（非官方）。
+ * 上游版权：Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * 本文件自 2026 年起被修改；修改声明与名称/标识的处理见仓库根目录 NOTICE.md。
+ *
+ * 本程序为自由软件：你可以依据 GNU 通用公共许可证第 3 版（或更高版本）重新发布
+ * 和/或修改它。分发时请保留本声明、上游版权与 LICENSE。
+ */
+
+/*
  * Zalith Launcher 2
- * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,14 +28,19 @@
 package com.zalith.pcl.ui.screens.splash
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,24 +56,39 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.nonInteractiveScrollbar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zalith.pcl.BuildKeys
 import com.zalith.pcl.R
 import com.zalith.pcl.components.InstallableItem
+import com.zalith.pcl.setting.AllSettings
 import com.zalith.pcl.ui.base.BaseScreen
-import com.zalith.pcl.ui.components.AnimatedDirection
 import com.zalith.pcl.ui.components.BackgroundCard
 import com.zalith.pcl.ui.components.MarqueeText
 import com.zalith.pcl.ui.components.ScalingActionButton
-import com.zalith.pcl.ui.components.animated
-import com.zalith.pcl.ui.components.rememberAnimatedContext
+import com.zalith.pcl.ui.pcl2.components.PclButton
+import com.zalith.pcl.ui.pcl2.components.PclCard
+import com.zalith.pcl.ui.pcl2.components.PclColorState
+import com.zalith.pcl.ui.pcl2.components.PclListItem
+import com.zalith.pcl.ui.pcl2.data.PclThemeState
+import com.zalith.pcl.ui.pcl2.theme.PclTextStyle
+import com.zalith.pcl.ui.pcl2.theme.PclTheme
+import com.zalith.pcl.ui.pcl2.theme.pclPalette
+import com.zalith.pcl.ui.screens.NormalNavKey
 import com.zalith.pcl.ui.theme.itemColor
 import com.zalith.pcl.ui.theme.onItemColor
 import com.zalith.pcl.utils.animation.getAnimateTween
+import com.zalith.pcl.utils.animation.swapAnimateDpAsState
 import com.zalith.pcl.viewmodel.SplashBackStackViewModel
 
 @Composable
@@ -68,53 +97,201 @@ fun UnpackScreen(
     screenViewModel: SplashBackStackViewModel,
     onAgreeClick: () -> Unit = {}
 ) {
-    BaseScreen(
-        screenKey = SplashOperation.Unpacking,
-        currentKey = screenViewModel.splashScreen.currentKey
-    ) { isVisible ->
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(all = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            UnpackTaskList(
+    if (AllSettings.usePcl2Ui.state) {
+        // z-pcl：解压依赖页也按 PCL2 样式渲染（这是进启动器前的第一屏，
+        // 不做的话用户会先看到一屏原生 Material 再「跳」进 PCL 界面）
+        PclUnpackContent(items = items, onAgreeClick = onAgreeClick)
+    } else {
+        BaseScreen(
+            screenKey = SplashOperation.Unpacking,
+            currentKey = screenViewModel.splashScreen.currentKey
+        ) { isVisible ->
+            Row(
                 modifier = Modifier
-                    .weight(7f)
-                    .fillMaxHeight(),
-                isVisible = isVisible,
-                items = items,
+                    .fillMaxSize()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                UnpackTaskList(
+                    isVisible = isVisible,
+                    items = items,
+                    modifier = Modifier
+                        .weight(7f)
+                        .fillMaxHeight()
+                )
 
-            )
-
-            ActionMenu(
-                modifier = Modifier
-                    .weight(3f)
-                    .fillMaxHeight(),
-                isVisible = isVisible,
-                items = items,
-                onAgreeClick = onAgreeClick
-            )
+                ActionMenu(
+                    isVisible = isVisible,
+                    modifier = Modifier
+                        .weight(3f)
+                        .fillMaxHeight(),
+                    onAgreeClick = onAgreeClick
+                )
+            }
         }
     }
+}
+
+/**
+ * PCL2 样式的解压依赖页。
+ *
+ * 布局与原生版一致（左列表 + 右说明/按钮），但全部换成 PCL 控件与配色：
+ * 底色 #F5F5F5、PclCard 列表、PclListItem 行、右下角 Highlight 描边按钮。
+ */
+@Composable
+private fun PclUnpackContent(
+    items: List<InstallableItem>,
+    onAgreeClick: () -> Unit,
+) {
+    PclTheme(palette = PclThemeState.palette) {
+        val p = pclPalette
+        // 只有用户点了「同意并安装」之后按钮才变成「正在安装」并置灰。
+        // 这一屏**不再自动开始**：装什么、占多少空间由用户点这一下决定。
+        var clicked by remember { mutableStateOf(false) }
+        val installing = clicked
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF5F5F5))
+        ) {
+            // 顶栏：居中启动器名（与原生 SplashScreen 的 TopBar 对位）
+            // GPLv3 第 7 条：启动页必须标注「非官方修改版」，与原生启动页保持一致。
+            Column(
+                modifier = Modifier.fillMaxWidth().height(40.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(text = BuildKeys.LAUNCHER_NAME, style = PclTextStyle.base(p))
+                Text(
+                    text = "非官方修改版 · 与 Zalith Launcher 官方无关",
+                    style = PclTextStyle.base(p).copy(fontSize = 10.sp),
+                    color = p.gray2,
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                PclCard(
+                    title = stringResource(R.string.splash_screen_title),
+                    modifier = Modifier
+                        .weight(7f)
+                        .fillMaxHeight(),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        items.forEach { item ->
+                            PclUnpackItemRow(item = item)
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(3f)
+                        .fillMaxHeight()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            text = if (installing) {
+                                stringResource(R.string.splash_screen_installing)
+                            } else {
+                                stringResource(R.string.splash_screen_unpack_desc)
+                            },
+                            style = PclTextStyle.base(p)
+                        )
+                    }
+
+                    PclButton(
+                        text = stringResource(R.string.splash_screen_agree),
+                        enabled = !installing,
+                        colorState = PclColorState.Highlight,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            clicked = true
+                            onAgreeClick()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 单个解压项：PCL 列表行，标题 = 组件名，副标题 = 说明 / 实时任务消息，状态跟在标题后。 */
+@Composable
+private fun PclUnpackItemRow(item: InstallableItem) {
+    val state by item.state.collectAsStateWithLifecycle()
+    val message by item.task.taskMessage.collectAsStateWithLifecycle()
+    val p = pclPalette
+
+    val info = when (state) {
+        InstallableItem.State.RUNNING -> message ?: stringResource(R.string.generic_unpacking, item.name)
+        else -> item.summary
+    }
+    val suffix = when (state) {
+        InstallableItem.State.PENDING -> stringResource(R.string.unpack_state_pending)
+        InstallableItem.State.RUNNING -> stringResource(R.string.unpack_state_running)
+        InstallableItem.State.FINISHED -> stringResource(R.string.unpack_state_finished)
+        else -> null
+    }
+
+    PclListItem(
+        title = item.name,
+        info = info,
+        titleSuffix = suffix,
+        onClick = null,
+        logoContent = {
+            when (state) {
+                InstallableItem.State.RUNNING -> CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp
+                )
+                InstallableItem.State.FINISHED -> Icon(
+                    painter = painterResource(R.drawable.ic_check),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = p.color3
+                )
+                else -> Icon(
+                    painter = painterResource(R.drawable.ic_folder_zip_outlined),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = p.gray3
+                )
+            }
+        }
+    )
 }
 
 @Composable
 private fun ActionMenu(
     isVisible: Boolean,
-    items: List<InstallableItem>,
     modifier: Modifier = Modifier,
-    onAgreeClick: () -> Unit = {}
+    onAgreeClick: () -> Unit = {},
 ) {
-    val states = items.map { item ->
-        item.state.collectAsStateWithLifecycle().value
-    }
-    val installing = states.any { it == InstallableItem.State.RUNNING }
-    val hasFailed = states.any { it == InstallableItem.State.FAILED }
-    val ctx = rememberAnimatedContext(isVisible = isVisible)
+    var clicked by remember { mutableStateOf(false) }
+    val installing = clicked
+
+    val xOffset by swapAnimateDpAsState(
+        targetValue = 40.dp,
+        swapIn = isVisible,
+        isHorizontal = true
+    )
 
     Column(
-        modifier = modifier.animated(ctx, from = AnimatedDirection.Right),
+        modifier = modifier.offset { IntOffset(x = xOffset.roundToPx(), y = 0) },
     ) {
         Column(
             modifier = Modifier
@@ -133,19 +310,14 @@ private fun ActionMenu(
         }
 
         ScalingActionButton(
-            enabled = !installing && states.any {
-                it == InstallableItem.State.NOT_STARTED ||
-                it == InstallableItem.State.PENDING ||
-                it == InstallableItem.State.FAILED
-            },
+            enabled = !installing,
             modifier = Modifier.fillMaxWidth(),
-            onClick = onAgreeClick
+            onClick = {
+                clicked = true
+                onAgreeClick()
+            }
         ) {
-            MarqueeText(
-                text = stringResource(
-                    if (hasFailed) R.string.generic_retry else R.string.splash_screen_agree
-                )
-            )
+            MarqueeText(text = stringResource(R.string.splash_screen_agree))
         }
     }
 }
@@ -156,10 +328,13 @@ private fun UnpackTaskList(
     items: List<InstallableItem>,
     modifier: Modifier = Modifier,
 ) {
-    val ctx = rememberAnimatedContext(isVisible = isVisible)
+    val yOffset by swapAnimateDpAsState(
+        targetValue = (-40).dp,
+        swapIn = isVisible
+    )
 
     BackgroundCard(
-        modifier = modifier.animated(ctx),
+        modifier = modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
         influencedByBackground = false,
         shape = MaterialTheme.shapes.extraLarge
     ) {
@@ -215,7 +390,7 @@ private fun TaskItem(
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
-                if (state == InstallableItem.State.RUNNING || state == InstallableItem.State.FAILED) {
+                if (state == InstallableItem.State.RUNNING) {
                     message?.let { taskMessage ->
                         Text(
                             text = taskMessage,
@@ -255,13 +430,6 @@ private fun TaskItem(
                     Icon(
                         modifier = iconModifier,
                         painter = painterResource(R.drawable.ic_check),
-                        contentDescription = null
-                    )
-                }
-                InstallableItem.State.FAILED -> {
-                    Icon(
-                        modifier = iconModifier,
-                        painter = painterResource(R.drawable.ic_warning_filled),
                         contentDescription = null
                     )
                 }
