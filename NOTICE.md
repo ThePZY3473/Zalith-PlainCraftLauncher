@@ -3,7 +3,7 @@
 本仓库是 **Zalith Launcher 2** 的修改版，按 GNU 通用公共许可证第 3 版（GPLv3）分发。
 
 - **本版本名称**：ZPCL Launcher
-- **本版本版本号**：1.5.4（versionCode 200085）
+- **本版本版本号**：1.5.4（versionCode 200086）
 - **上游项目**：Zalith Launcher 2 — <https://github.com/ZalithLauncher/ZalithLauncher2>
 - **上游源码基线**：2.8.1（2026-11 合并；此前基线为 2.6.1）
 - **上游版权**：Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors

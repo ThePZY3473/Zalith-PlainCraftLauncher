@@ -578,16 +578,42 @@ class PclRuntime(
         return PclLaunchCheck.Ready
     }
 
-    /**
-     * 检查并启动。检查不通过时通过左下角提示条给出原因（对应 PCL 的 Hint）。
-     */
+    private val accountPreparation = Mutex()
+
+    /** 明确登录其他账号时，不复用已选账号，也不自动启动游戏。 */
+    fun signInToAuthServer(serverName: String, baseUrl: String, registerUrl: String) {
+        if (baseUrl.isBlank() || isLaunching) return
+        scope.launch {
+            if (!accountPreparation.tryLock()) return@launch
+            try {
+                val account = PclThirdPartyLogin.ask(
+                    context = activity,
+                    serverName = serverName,
+                    baseUrl = baseUrl,
+                    registerUrl = registerUrl,
+                    useSavedInput = false,
+                ) ?: return@launch
+                hint("已登录「${account.username}」", PclHintTheme.Green)
+            } finally {
+                accountPreparation.unlock()
+            }
+        }
+    }
+
     fun tryLaunch() {
         when (checkLaunch()) {
             PclLaunchCheck.Ready -> {
                 val version = currentVersion.value ?: return
                 scope.launch {
-                    // 按「版本设置 → 服务器 → 登录方式」把账户调整到位（必要时当场登录）
-                    if (prepareAccount(version)) launch()
+                    if (!accountPreparation.tryLock()) return@launch
+                    try {
+                        // 等账户准备完成后启动同一个版本，避免按另一版本的登录配置选错账户。
+                        if (prepareAccount(version) && currentVersion.value == version) {
+                            launchVersion(version, quickPlay = null)
+                        }
+                    } finally {
+                        accountPreparation.unlock()
+                    }
                 }
             }
             PclLaunchCheck.NoVersion ->

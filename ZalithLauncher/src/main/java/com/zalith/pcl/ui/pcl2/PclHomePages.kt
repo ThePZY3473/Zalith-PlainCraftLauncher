@@ -541,14 +541,14 @@ private fun ColumnScope.PclHomeInput(nav: PclNavController, runtime: PclRuntime)
     // 这是用户明确要的口径：版本选了「仅正版登录」，右栏就只剩正版这一种，离线 / 外置
     // 根本不出现；选了第三方（统一通行证 / Authlib），整块换成该服务器的登录面板，
     // 版式见 [PclAuthLoginPanel]。
-    val loginType = version?.getVersionConfig()?.loginTypeValue()
-        ?: VersionLoginType.MICROSOFT_OR_OFFLINE
+    val loginConfig = version?.getVersionConfig()
+    val loginType = loginConfig?.loginTypeValue() ?: VersionLoginType.MICROSOFT_OR_OFFLINE
     val thirdParty = loginType.isThirdParty()
     val showMicrosoftPill = !thirdParty && loginType != VersionLoginType.OFFLINE_ONLY
     val showOfflinePill = !thirdParty && loginType != VersionLoginType.MICROSOFT_ONLY
-    val authBaseUrl = remember(version) { version?.getVersionConfig()?.loginBaseUrl().orEmpty() }
-    val authServerName = remember(version) { version?.getVersionConfig()?.loginServerTitle().orEmpty() }
-    val authRegisterUrl = remember(version) { version?.getVersionConfig()?.loginRegisterUrl.orEmpty() }
+    val authBaseUrl = loginConfig?.loginBaseUrl().orEmpty()
+    val authServerName = loginConfig?.loginServerTitle().orEmpty()
+    val authRegisterUrl = loginConfig?.loginRegisterUrl.orEmpty()
     // PCL 的 PanType 是「正版 / 离线」两枚可切换胶囊（LoginPageType 决定显示哪一块登录页）。
     // 这里多一态「外置登录」，并且**由版本配置决定哪几态可用**。
     var loginPage by remember { mutableStateOf(HomeLoginPage.Microsoft) }
@@ -1483,7 +1483,6 @@ private fun PclAuthLoginPanel(
     account: Account?,
     accounts: List<Account>,
 ) {
-    val p = pclPalette
     val context = LocalContext.current
     val runtime = LocalPclRuntime.current
 
@@ -1510,33 +1509,39 @@ private fun PclAuthLoginPanel(
     }
     var password by remember(baseUrl) { mutableStateOf(saved.password) }
     var remember by remember(baseUrl) { mutableStateOf(saved.remember) }
-    var showHistory by remember { mutableStateOf(false) }
+    var showAccountPicker by remember(baseUrl) { mutableStateOf(false) }
 
     // 输入即同步给启动链路（内存那份），勾了「记住密码」才写盘
-    LaunchedEffect(email, password, remember) {
+    LaunchedEffect(baseUrl, email, password, remember) {
         PclAuthLoginSettings.save(context, baseUrl, PclAuthLoginSettings.Saved(email, password, remember))
     }
 
-    // 「邮箱」下拉里的历史账号：这台服务器上已登录过的账户 + 记住的那个
-    val history = remember(accounts, baseUrl, saved.email) {
-        buildList {
-            accounts.filter { it.belongsToAuthServer(baseUrl) }
-                .mapNotNull { it.otherAccount?.takeIf { value -> value.isNotBlank() } }
-                .forEach { add(it) }
-            if (saved.email.isNotBlank()) add(saved.email)
-        }.distinct()
-    }
-
-    // 「切换账号」：和正版面板的 picking 同一个语义 —— 先回到输入框，登录成功再自动收起
-    var picking by remember { mutableStateOf(false) }
-    LaunchedEffect(loggedIn?.uniqueUUID) {
-        if (loggedIn != null) picking = false
+    // 一个邮箱可能对应多个角色；按账户 ID 选择，而不是把邮箱填回输入框。
+    val savedAccounts = accounts.filter { it.belongsToAuthServer(baseUrl) }
+    if (showAccountPicker) {
+        PclSelectDialog(
+            title = "切换第三方账号",
+            options = savedAccounts.map { it.uniqueUUID.toString() to it.username },
+            current = loggedIn?.uniqueUUID?.toString(),
+            onSelect = { id ->
+                savedAccounts.firstOrNull { it.uniqueUUID.toString() == id }?.let { selected ->
+                    if (selected.uniqueUUID != loggedIn?.uniqueUUID) runtime.switchAccount(selected)
+                }
+                showAccountPicker = false
+            },
+            onDismiss = { showAccountPicker = false },
+            extraButtonText = "登录其他账号",
+            onExtraButton = {
+                showAccountPicker = false
+                runtime.signInToAuthServer(serverName, baseUrl, registerUrl)
+            },
+        )
     }
 
     // 标题不在这里画：PCL 把它画成了 `PanTypeOne` 那枚静态胶囊（见 [PclLoginTypeCapsule]），
     // 位置在登录面板**上面**、和正版 / 离线那两枚胶囊同一行，所以由调用方负责。
     Column(modifier = Modifier.fillMaxSize()) {
-        if (loggedIn != null && !picking) {
+        if (loggedIn != null) {
             // ---- 已登录：整块换成和正版一样的「皮肤头像 + 角色名 + 按钮行」。
             //      PCL 的 `PageLoginAuth` 只画输入框，没有已登录样式（它把这件事交给
             //      `PageLoginMsSkin` 那一套去了），这里是照正版面板补的。
@@ -1549,41 +1554,35 @@ private fun PclAuthLoginPanel(
                     baseUrl = baseUrl,
                     registerUrl = registerUrl,
                     current = loggedIn,
-                    onSwitch = { picking = true },
+                    onSwitch = { showAccountPicker = true },
                 )
             }
             return@Column
         }
 
-        // ---- 未登录（或刚点了「切换账号」）：中间留白 + 账号密码
-        Box(modifier = Modifier.weight(1f).fillMaxWidth())
+        if (savedAccounts.isNotEmpty()) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                PclButton(text = "选择第三方账号", onClick = { showAccountPicker = true })
+            }
+            return@Column
+        }
 
-        // ---- 邮箱（PCL 的可编辑 ComboBox：手动输入 + 右侧下拉选历史账号）
+        // 第一次登录这个服务器：填好资料后点「启动游戏」。
+        Box(modifier = Modifier.weight(1f).fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) {
             PclText(text = "邮箱", modifier = Modifier.width(36.dp))
             Spacer(Modifier.width(8.dp))
-            Box(modifier = Modifier.weight(1f)) {
-                PclTextBox(
-                    value = email,
-                    modifier = Modifier.fillMaxWidth(),
-                    onValueChange = { email = it },
-                )
-                if (history.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .clickable { showHistory = true }
-                            .padding(horizontal = 6.dp, vertical = 8.dp),
-                    ) {
-                        Icon(
-                            imageVector = PclIcons.comboArrow,
-                            contentDescription = "选择已登录的账号",
-                            tint = p.color3,
-                            modifier = Modifier.size(9.dp, 6.dp),
-                        )
-                    }
-                }
-            }
+            PclTextBox(
+                value = email,
+                modifier = Modifier.weight(1f),
+                onValueChange = {
+                    if (email != it) password = ""
+                    email = it
+                },
+            )
         }
         Spacer(Modifier.height(9.dp))
 
@@ -1620,18 +1619,6 @@ private fun PclAuthLoginPanel(
         Spacer(Modifier.height(16.dp))
     }
 
-    if (showHistory) {
-        PclSelectDialog(
-            title = "选择账号",
-            options = history.map { it to it },
-            current = email,
-            onSelect = {
-                email = it
-                showHistory = false
-            },
-            onDismiss = { showHistory = false },
-        )
-    }
 }
 
 /**

@@ -655,6 +655,7 @@ fun PclDualInputDialog(
     confirmText: String = MSG_BTN_OK,
     onConfirm: (String, String) -> Unit,
     onDismiss: () -> Unit,
+    secretSecond: Boolean = false,
 ) {
     var first by remember { mutableStateOf(initial1) }
     var second by remember { mutableStateOf(initial2) }
@@ -703,6 +704,7 @@ fun PclDualInputDialog(
             PclTextBox(
                 value = second,
                 hint = hint2,
+                secret = secretSecond,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(

@@ -32,7 +32,6 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.zalith.pcl.game.account.Account
@@ -45,9 +44,15 @@ import com.zalith.pcl.ui.pcl2.components.PclDualInputDialog
 import com.zalith.pcl.ui.pcl2.components.PclNoticeDialog
 import com.zalith.pcl.ui.pcl2.components.PclSelectDialog
 import com.zalith.pcl.ui.pcl2.data.PclAuthLoginSettings
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 一条待完成的第三方登录。
@@ -58,8 +63,10 @@ class PclThirdPartyLoginRequest(
     val serverName: String,
     val baseUrl: String,
     val registerUrl: String,
+    internal val scope: CoroutineScope,
 ) {
     internal val answer = CompletableDeferred<Account?>()
+    internal var loginJob: Job? = null
 
     /** 正在跟服务器要凭据（此时输入框已经收起，改成一条「正在登录」提示）。 */
     var busy by mutableStateOf(false)
@@ -126,27 +133,25 @@ object PclThirdPartyLogin {
         serverName: String,
         baseUrl: String,
         registerUrl: String,
-    ): Account? {
-        // 1）主页面板里已经填过邮箱密码（本次输入或勾了「记住密码」）：
-        //    直接拿去换凭据，别再弹一遍框 —— 用户刚在上面填完就要他再填一次是最恼人的。
-        val saved = PclAuthLoginSettings.current(context, baseUrl)
-        if (saved.usable) {
-            val quiet = performLogin(context, serverName, baseUrl, registerUrl, saved.email, saved.password)
-            if (quiet.account != null) return quiet.account
-            // 用户在角色选择框上按了取消：那就是这一次不要登录了，别再弹输入框追问
-            if (quiet.aborted) return null
-            // 静默登录失败（密码改了 / 服务器抽风）：落到输入框，并把报错原因带上
+        useSavedInput: Boolean = true,
+    ): Account? = coroutineScope {
+        // 点「登录其他账号」时必须打开空表单，不能用此前记住的账号登录。
+        val saved = if (useSavedInput) PclAuthLoginSettings.current(context, baseUrl) else null
+        val quiet = saved?.takeIf { it.usable }?.let {
+            performLogin(context, serverName, baseUrl, registerUrl, it.email.trim(), it.password)
         }
+        quiet?.account?.let { return@coroutineScope it }
+        if (quiet?.aborted == true) return@coroutineScope null
 
-        // 2）上一条还没答完（极端情况）：放它过去，别把协程挂死
-        pending?.let { old ->
-            pending = null
-            old.cancelled = true
-            old.answer.complete(null)
-        }
-        val request = PclThirdPartyLoginRequest(serverName, baseUrl, registerUrl)
+        if (pending != null) abort()
+        val request = PclThirdPartyLoginRequest(serverName, baseUrl, registerUrl, this)
+        request.error = quiet?.error
         pending = request
-        return request.answer.await()
+        try {
+            request.answer.await()
+        } finally {
+            if (pending === request) abort()
+        }
     }
 
     /**
@@ -161,30 +166,15 @@ object PclThirdPartyLogin {
         registerUrl: String,
         email: String,
         password: String,
-    ): LoginOutcome {
-        val outcome = CompletableDeferred<LoginOutcome>()
+    ): LoginOutcome = coroutineScope {
+        val outcome = CompletableDeferred<LoginOutcome>(coroutineContext[Job])
+        var roleRequest: PclRolePickRequest? = null
         val helper = AuthServerHelper(
             baseUrl = baseUrl,
             serverName = serverName,
             email = email,
             password = password,
-            onSuccess = { account, _ ->
-                // 认证服务器先入库：账号管理页要靠它显示「服务器名称 / 注册链接」，
-                // 少了这一行，账户在原生界面里会变成一条查不到服务器的孤魂。
-                runCatching {
-                    AccountsManager.saveAuthServer(
-                        AuthServer(
-                            baseUrl = baseUrl,
-                            serverName = serverName,
-                            register = registerUrl.ifBlank { null },
-                        )
-                    )
-                }
-                account.downloadYggdrasil()
-                // 保存的同时会把当前账户切到它
-                AccountsManager.suspendSaveAccount(account)
-                if (!outcome.isCompleted) outcome.complete(LoginOutcome(account, null))
-            },
+            onSuccess = { account, _ -> outcome.complete(LoginOutcome(account, null)) },
             onFailed = { th ->
                 if (!outcome.isCompleted) {
                     outcome.complete(LoginOutcome(null, th.message ?: th.javaClass.simpleName))
@@ -204,31 +194,54 @@ object PclThirdPartyLogin {
             } else if (profiles.size == 1) {
                 select(profiles.first())
             } else {
-                pendingRoles = PclRolePickRequest(
-                    serverName = serverName,
-                    profiles = profiles,
-                    selectProfile = { profile -> select(profile) },
-                    cancel = {
-                        if (!outcome.isCompleted) {
-                            outcome.complete(
-                                LoginOutcome(null, "没有选择角色，本次登录已取消。", aborted = true)
-                            )
-                        }
-                    },
-                )
+                launch(Dispatchers.Main.immediate) {
+                    if (outcome.isCompleted) return@launch
+                    val request = PclRolePickRequest(
+                        serverName = serverName,
+                        profiles = profiles,
+                        selectProfile = { profile -> select(profile) },
+                        cancel = { outcome.complete(LoginOutcome(null, null, aborted = true)) },
+                    )
+                    roleRequest = request
+                    pendingRoles = request
+                }
             }
         }
-        return outcome.await()
+        try {
+            val result = outcome.await()
+            val account = result.account ?: return@coroutineScope result
+            // 回调只返回验证结果。登录没被取消时，才在本次登录协程里保存和切换账户。
+            try {
+                withContext(Dispatchers.IO) {
+                    AccountsManager.saveAuthServer(
+                        AuthServer(baseUrl = baseUrl, serverName = serverName, register = registerUrl.ifBlank { null })
+                    )
+                }
+                ensureActive()
+                AccountsManager.suspendSaveAccount(account)
+                if (AccountsManager.currentAccountFlow.value?.uniqueUUID == account.uniqueUUID) {
+                    result
+                } else {
+                    LoginOutcome(null, "登录成功，但未能保存并切换到该角色。")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LoginOutcome(null, e.message ?: e.javaClass.simpleName)
+            }
+        } finally {
+            if (pendingRoles === roleRequest) pendingRoles = null
+        }
     }
 
     /** 提交账号密码，开始登录（输入框那条路）。 */
     fun submit(
-        scope: CoroutineScope,
         context: Context,
         email: String,
         password: String,
     ) {
         val request = pending ?: return
+        if (request.busy) return
         if (email.isBlank() || password.isBlank()) {
             request.error = "请输入邮箱 / 用户名与密码。"
             return
@@ -236,17 +249,16 @@ object PclThirdPartyLogin {
         request.error = null
         request.busy = true
 
-        scope.launch {
+        request.loginJob = request.scope.launch {
             val outcome = performLogin(
                 context = context,
                 serverName = request.serverName,
                 baseUrl = request.baseUrl,
                 registerUrl = request.registerUrl,
-                email = email,
+                email = email.trim(),
                 password = password,
             )
-            // 用户中途点过取消：结果回来也不再落库 / 切账户
-            if (request.cancelled) return@launch
+            if (pending !== request || request.cancelled) return@launch
             request.busy = false
             when {
                 outcome.account != null -> {
@@ -274,16 +286,15 @@ object PclThirdPartyLogin {
         // 正在登录、或者刚报过错（错误提示还挂着）时都不算「用户放弃」：
         // 前者不能自己打断自己，后者要在关掉错误后回到输入框重试。
         if (request.busy || request.error != null) return
-        request.cancelled = true
-        pending = null
-        request.answer.complete(null)
+        abort()
     }
 
-    /** 「正在登录」提示上的「取消」：这次是真的放弃（结果回来也不再用它）。 */
+    /** 「正在登录」提示上的「取消」：不再使用这次登录的结果。 */
     fun abort() {
         val request = pending ?: return
         request.cancelled = true
         pending = null
+        request.loginJob?.cancel()
         request.answer.complete(null)
     }
 
@@ -315,7 +326,6 @@ fun PclThirdPartyLoginHost() {
 
     val request = PclThirdPartyLogin.pending ?: return
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     when {
         request.error != null -> PclNoticeDialog(
@@ -339,9 +349,10 @@ fun PclThirdPartyLoginHost() {
             hint2 = "密码只用于向该认证服务器换取凭据",
             confirmText = "登录",
             onConfirm = { email, password ->
-                PclThirdPartyLogin.submit(scope, context, email, password)
+                PclThirdPartyLogin.submit(context, email, password)
             },
             onDismiss = { PclThirdPartyLogin.cancel() },
+            secretSecond = true,
         )
     }
 }
