@@ -70,6 +70,19 @@ enum class UpdateSourceKind {
 }
 
 /**
+ * 一次探测的结果。
+ *
+ * @param siteAvailable 官网这一侧是否可用。官网不可用时，调用方不该再显示
+ *   「官网下载方式」里的跳转入口（123 云盘、QQ 群）—— 它们本来就是从官网取的，
+ *   官网都连不上，把这些条目列出来只会让用户点了没反应。
+ * @param sources 弹窗里要列的下载源。
+ */
+data class UpdateSourceProbeResult(
+    val siteAvailable: Boolean,
+    val sources: List<UpgradeSource>,
+)
+
+/**
  * 更新源探测。
  *
  * 全程用 [HttpURLConnection] 而不是 Ktor 的 `GLOBAL_CLIENT`：这里要的是**毫秒级的失败**，
@@ -95,43 +108,49 @@ object UpdateSourceProbe {
     private const val PROXY_PREFIX = "https://axisnow.gh-proxy.org/"
 
     /**
-     * 并发探测所有源，**只返回真正可用的**（按握手耗时升序）。
+     * 探测更新源：**官网优先，官网整体失败才退回 GitHub**。
+     *
+     * 需求是「下载方式从官网拿，官网失败就只显示 GitHub 的」。所以这里不再像以前那样
+     * 把官网和 GitHub 并列成两个平级选项 —— 两边同时出现时，用户会以为是两条不同的
+     * 下载渠道，而官网多数时候转发的就是 GitHub 的同一批地址。
      *
      * @param siteBases 官网候选地址，按优先级排列。调用方负责去重与去尾斜杠。
      */
-    suspend fun probeAll(siteBases: List<String>): List<UpgradeSource> = coroutineScope {
-        val siteJobs = siteBases.map { base ->
-            async(Dispatchers.IO) { probeSite(base) }
-        }
-        val githubJob = async(Dispatchers.IO) { probeGithub() }
-
+    suspend fun probeUpdate(siteBases: List<String>): UpdateSourceProbeResult = coroutineScope {
         // 官网的多个候选地址是**互为容灾**的关系，不是并列选项：
-        // 三个都通时只在弹窗里留最快的那一个，否则会出现三条内容完全一样的「官网」，
-        // 用户根本分不清该选哪个。
-        val bestSite = siteJobs.awaitAll().filterNotNull().minByOrNull { it.latencyMs }
-        val github = githubJob.await()
+        // 三个都通时只留最快的那一个，否则会出现三条内容完全一样的「官网」。
+        val bestSite = siteBases
+            .map { base -> async(Dispatchers.IO) { probeSite(base) } }
+            .awaitAll()
+            .filterNotNull()
+            .minByOrNull { it.latencyMs }
 
-        val direct = listOfNotNull(bestSite, github)
-            // 官网转发 GitHub 时，两份列表的下载地址完全一样 —— 只保留官网这条
-            // （它在前面），不然用户会看到两个「源」下的是同一个包。
-            .distinctBy { src -> src.files.map { it.uri }.sorted().joinToString("|") }
-
-        // 加速源的文件地址从上面任一份列表派生：这样文件名、架构、大小一定和真实资产一致，
-        // 不用在启动器里再猜一遍 `ZPCL-Launcher-<版本>-<ABI>.apk` 的拼法。
-        //
-        // 取「整份列表」而不是单条：加速源也要能选架构，只给一条 arm64 的话
-        // 32 位机选了加速源会发现没有自己能装的包。
-        val proxyFiles = direct
-            .firstNotNullOfOrNull { src -> src.files.takeIf { it.all { f -> f.uri.startsWith("https://github.com/") } && it.isNotEmpty() } }
-        val proxy = if (proxyFiles == null) {
-            null
-        } else {
-            async(Dispatchers.IO) { probeProxy(proxyFiles) }.await()
+        if (bestSite == null) {
+            // 官网整体不可用：只给 GitHub（直连 + 加速）
+            val github = async(Dispatchers.IO) { probeGithub() }.await()
+            val proxy = if (github != null) {
+                async(Dispatchers.IO) { probeProxy(github.files) }.await()
+            } else {
+                null
+            }
+            return@coroutineScope UpdateSourceProbeResult(
+                siteAvailable = false,
+                sources = listOfNotNull(github, proxy).sortedBy { it.latencyMs },
+            )
         }
 
-        (direct + listOfNotNull(proxy))
-            .distinctBy { it.id }
-            .sortedBy { it.latencyMs }
+        // 官网可用：只列官网这一条。
+        // 但它转发的是 GitHub 直链时，再补一条加速通道 —— 那不是「另一个来源」，
+        // 只是同一条地址的反代；官网通、GitHub 被墙时，这条就是唯一的活路。
+        val proxy = if (bestSite.files.all { it.uri.startsWith("https://github.com/") }) {
+            async(Dispatchers.IO) { probeProxy(bestSite.files) }.await()
+        } else {
+            null
+        }
+        UpdateSourceProbeResult(
+            siteAvailable = true,
+            sources = listOfNotNull(bestSite, proxy).sortedBy { it.latencyMs },
+        )
     }
 
     // ---------------------------------------------------------------- 各源探测

@@ -172,23 +172,27 @@ class LauncherUpgradeViewModel: ViewModel() {
     /**
      * 开始探测更新源。
      *
+     * 顺序按需求定死：**先问官网要下载方式，官网整体失败才退回 GitHub**。
+     * 官网的跳转入口（123 云盘、QQ 群）也只在官网可用时才附上 —— 它们本来就是从
+     * 官网 `/api/downloads` 取的，官网连不上时列出来只会让用户点了没反应。
+     *
      * 同一个弹窗被重复组合时会反复调到这里，[UpdateSourceState.Probing] 期间直接返回，
-     * 避免每次重组都重开一轮 5 个并发请求。探测本身有 4 秒单源上限，
-     * 最坏情况就是 4 秒后出结果。
+     * 避免每次重组都重开一轮并发请求。探测本身有 4 秒单源上限，最坏情况就是 4 秒后出结果。
      */
     fun startProbe() {
         if (sourceState is UpdateSourceState.Probing) return
         sourceState = UpdateSourceState.Probing
         viewModelScope.launch {
-            val direct = runCatching { UpdateSourceProbe.probeAll(siteBases()) }
+            val probed = runCatching { UpdateSourceProbe.probeUpdate(siteBases()) }
                 .onFailure { Logger.warning(TAG, "更新源探测异常：${it.javaClass.simpleName}: ${it.message}") }
-                .getOrDefault(emptyList())
-            // 直链源排前面（按握手耗时），跳转类入口附在最后。
-            val sources = direct + externalSources()
+                .getOrNull()
+            val externals = if (probed?.siteAvailable == true) externalSources() else emptyList()
+            val sources = probed?.sources.orEmpty() + externals
             sourceState = if (sources.isEmpty()) {
-                UpdateSourceState.Empty("当前网络下所有下载源都没能在 4 秒内握手成功。")
+                UpdateSourceState.Empty("官网和 GitHub 都没能在 4 秒内握手成功，换个网络再试。")
             } else {
-                Logger.info(TAG, "可用更新源 ${sources.size} 个：${sources.joinToString { "${it.name}(${it.kind})" }}")
+                Logger.info(TAG, "可用更新源 ${sources.size} 个（官网可用=${probed?.siteAvailable}）：" +
+                        sources.joinToString { "${it.name}(${it.kind})" })
                 UpdateSourceState.Ready(sources)
             }
         }

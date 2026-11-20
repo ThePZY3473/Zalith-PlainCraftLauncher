@@ -723,7 +723,7 @@ private fun PclSkinHiddenCheck(key: String, label: String) {
             PclSkinSettings.persist(context)
             if (checked) {
                 PclHintHost.push(
-                    "「$label」已隐藏。连点右下角 ${PclSkinSettings.PEEK_TAP_COUNT} 次" +
+                    "「$label」已隐藏。连点左上角 ZPCL ${PclSkinSettings.PEEK_TAP_COUNT} 次" +
                             "可临时显示被隐藏的入口，" +
                             "去「设置 → 个性化 → 功能隐藏」取消勾选即可恢复。",
                     PclHintTheme.Yellow,
@@ -1143,7 +1143,7 @@ fun PclSetupUiPage() {
                         PclTextBox(
                             value = PclSkinSettings.logoText,
                             modifier = Modifier.fillMaxWidth(),
-                            hint = "PCL",
+                            hint = "ZPCL",
                             onValueChange = {
                                 PclSkinSettings.applyLogoText(it)
                                 PclSkinSettings.persist(context)

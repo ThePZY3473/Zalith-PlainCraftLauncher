@@ -759,9 +759,9 @@ private fun PclMainContent(
             }
             // 左下角提示条栈（PanHint Margin="0,0,0,20"，左对齐）
             PclHintStack(Modifier.align(Alignment.BottomStart).padding(bottom = PclDimens.hintStackBottom))
-            // 右下角「连点 10 次」热区：临时显示被「功能隐藏」藏起来的入口。
-            // 放在悬浮按钮**之前** —— 角落有按钮时，点按钮不该被计进手势。
-            PclHiddenPeekGesture(modifier = Modifier.align(Alignment.BottomEnd))
+            // 「临时显示被隐藏的入口」的手势已经挪到左上角的 Logo 上（连点 10 次），
+            // 见 PclTitleBar 里的 rememberHiddenPeekTapModifier()。
+            // 原来右下角那块隐形热区就撤掉了：它紧挨着悬浮按钮，经常被误触。
             // 右下角悬浮按钮（StackPanel Margin="15"）
             PclExtraButtons(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(PclDimens.extraButtonStackMargin),
@@ -971,16 +971,29 @@ private fun PclTitleBar(nav: PclNavController) {
             // ShapeTitleLogo Width=39、Margin="19,15.5,0,15.5"（→ 高 17）；
             // 文本用 `LabTitleLogo`（FontSize=17、白色、Margin="18,0,0,0"）。
             val logoAlign = if (PclSkinSettings.logoLeft) Alignment.CenterStart else Alignment.Center
+            // 左上角 Logo 同时是「功能隐藏」的临时解锁手势：连点 [PclSkinSettings.PEEK_TAP_COUNT] 次。
+            // 点击热区就贴在 Logo 自己身上，不再在角落放一块隐形方块。
+            val peekTap = rememberHiddenPeekTapModifier()
             when (PclSkinSettings.logoType) {
-                PclLogoType.None -> Unit
+                // Logo 设成「不显示」时留一块同样大小的隐形热区，否则手势就没地方点了
+                PclLogoType.None -> Box(
+                    modifier = Modifier
+                        .align(logoAlign)
+                        .padding(start = PclDimens.titleLogoStart)
+                        .size(PEEK_HOTSPOT)
+                        .then(peekTap)
+                )
                 PclLogoType.Text -> Text(
-                    text = PclSkinSettings.logoText.ifBlank { "PCL" },
+                    text = PclSkinSettings.logoText.ifBlank { "ZPCL" },
                     style = PclTextStyle.base(p).copy(
                         fontSize = 17.sp,
                         lineHeight = PclTextStyle.lineHeight(17),
                         color = titleForeground,
                     ),
-                    modifier = Modifier.align(logoAlign).padding(start = PclDimens.titleLogoStart),
+                    modifier = Modifier
+                        .align(logoAlign)
+                        .padding(start = PclDimens.titleLogoStart)
+                        .then(peekTap),
                 )
                 PclLogoType.Picture -> {
                     // `UiLogoType = 3`（图片）：用「个性化 → 标题栏」里选的图片。
@@ -1000,7 +1013,8 @@ private fun PclTitleBar(nav: PclNavController) {
                                 .align(logoAlign)
                                 .padding(start = PclDimens.titleLogoStart)
                                 .height(PclDimens.titleLogoHeight)
-                                .widthIn(max = 140.dp),
+                                .widthIn(max = 140.dp)
+                                .then(peekTap),
                         )
                     } else {
                         androidx.compose.material3.Icon(
@@ -1010,7 +1024,8 @@ private fun PclTitleBar(nav: PclNavController) {
                             modifier = Modifier
                                 .align(logoAlign)
                                 .padding(start = PclDimens.titleLogoStart)
-                                .size(width = PclDimens.titleLogoWidth, height = PclDimens.titleLogoHeight),
+                                .size(width = PclDimens.titleLogoWidth, height = PclDimens.titleLogoHeight)
+                                .then(peekTap),
                         )
                     }
                 }
@@ -1021,7 +1036,8 @@ private fun PclTitleBar(nav: PclNavController) {
                     modifier = Modifier
                         .align(logoAlign)
                         .padding(start = PclDimens.titleLogoStart)
-                        .size(width = PclDimens.titleLogoWidth, height = PclDimens.titleLogoHeight),
+                        .size(width = PclDimens.titleLogoWidth, height = PclDimens.titleLogoHeight)
+                        .then(peekTap),
                 )
             }
 
@@ -1758,12 +1774,16 @@ private fun PclHintToast(
 }
 
 /**
- * 右下角的「连点 10 次」隐形热区：**临时**显示被「功能隐藏」勾掉的那些入口。
+ * 左上角 Logo 的「连点 10 次」手势：**临时**显示被「功能隐藏」勾掉的那些入口。
  *
  * 为什么需要这个：整块开关能把「设置」自己藏掉，而恢复它的开关就在设置页里 ——
  * 勾完等于把自己锁在门外。所以换个路子：勾选状态一个字不改，只是把「画不画」的
  * 判断临时放开 [PclSkinSettings.PEEK_DURATION_MS]，人趁这段时间进设置取消勾选，
  * 时间一到入口自动重新藏好。
+ *
+ * 入口按需求放在左上角的程序名（ZPCL）上 —— 原来藏在右下角一块隐形热区里，
+ * 紧挨着悬浮按钮，既不好找又容易误触。返回的 Modifier 交给 Logo 本身用；
+ * Logo 被设成「不显示」时，PclTitleBar 会在同一位置放一块同尺寸的隐形热区。
  *
  * 命中后：
  *   · 一个被隐藏的入口都没有时，直接说明「当前没有隐藏功能」，不做无意义的闪烁。
@@ -1772,52 +1792,47 @@ private fun PclHintToast(
  *   · 左下角给一条提示，写清「临时」「多久」「怎么提前收起」。
  */
 @Composable
-private fun PclHiddenPeekGesture(modifier: Modifier = Modifier) {
+private fun rememberHiddenPeekTapModifier(): Modifier {
     val nav = LocalPclNav.current
     val interaction = remember { MutableInteractionSource() }
     var taps by remember { mutableIntStateOf(0) }
     var lastTapAt by remember { mutableLongStateOf(0L) }
 
-    Box(
-        modifier = modifier
-            // 44dp：吸附在右下角，够手指连点，又不会挡到大片内容
-            .size(PEEK_HOTSPOT)
-            .clickable(interactionSource = interaction, indication = null) {
-                val now = SystemClock.elapsedRealtime()
-                // 两次点击隔太久就重新计数 —— 否则「一天里点了 10 次」也会触发
-                taps = if (now - lastTapAt > PEEK_TAP_WINDOW_MS) 1 else taps + 1
-                lastTapAt = now
-                if (taps < PclSkinSettings.PEEK_TAP_COUNT) return@clickable
-                taps = 0
+    return Modifier.clickable(interactionSource = interaction, indication = null) {
+        val now = SystemClock.elapsedRealtime()
+        // 两次点击隔太久就重新计数 —— 否则「一天里点了 10 次」也会触发
+        taps = if (now - lastTapAt > PEEK_TAP_WINDOW_MS) 1 else taps + 1
+        lastTapAt = now
+        if (taps < PclSkinSettings.PEEK_TAP_COUNT) return@clickable
+        taps = 0
 
-                val hiddenCount = PclSkinSettings.hiddenCount
-                if (hiddenCount == 0) {
-                    PclHintHost.push("当前没有被隐藏的功能。", PclHintTheme.Blue)
-                    return@clickable
-                }
+        val hiddenCount = PclSkinSettings.hiddenCount
+        if (hiddenCount == 0) {
+            PclHintHost.push("当前没有被隐藏的功能。", PclHintTheme.Blue)
+            return@clickable
+        }
 
-                // 已经在临时显示里，再点十次就当「提前收起」—— 免得人不知道怎么关掉
-                if (PclSkinSettings.isPeeking()) {
-                    PclSkinSettings.stopPeek()
-                    PclHintHost.push(
-                        "已收起临时显示，$hiddenCount 个入口重新隐藏。",
-                        PclHintTheme.Blue,
-                    )
-                    return@clickable
-                }
+        // 已经在临时显示里，再点十次就当「提前收起」—— 免得人不知道怎么关掉
+        if (PclSkinSettings.isPeeking()) {
+            PclSkinSettings.stopPeek()
+            PclHintHost.push(
+                "已收起临时显示，$hiddenCount 个入口重新隐藏。",
+                PclHintTheme.Blue,
+            )
+            return@clickable
+        }
 
-                PclSkinSettings.startPeek()
-                PclHintHost.push(
-                    "已临时显示 $hiddenCount 个被隐藏的入口，" +
-                            "${PclSkinSettings.PEEK_DURATION_MS / 1000} 秒后自动隐藏。" +
-                            "去「设置 → 个性化 → 功能隐藏」取消勾选就能永久恢复；" +
-                            "再连点右下角 ${PclSkinSettings.PEEK_TAP_COUNT} 次可提前收起。",
-                    PclHintTheme.Green,
-                )
-                // 「功能隐藏」在「设置 → 个性化」（左栏第 3 项）底部
-                nav.go(PclSection.Setup, 2)
-            }
-    )
+        PclSkinSettings.startPeek()
+        PclHintHost.push(
+            "已临时显示 $hiddenCount 个被隐藏的入口，" +
+                    "${PclSkinSettings.PEEK_DURATION_MS / 1000} 秒后自动隐藏。" +
+                    "去「设置 → 个性化 → 功能隐藏」取消勾选就能永久恢复；" +
+                    "再连点左上角 ZPCL ${PclSkinSettings.PEEK_TAP_COUNT} 次可提前收起。",
+            PclHintTheme.Green,
+        )
+        // 「功能隐藏」在「设置 → 个性化」（左栏第 3 项）底部
+        nav.go(PclSection.Setup, 2)
+    }
 }
 
 /** 「临时显示」手势：单次计数窗口 / 热区大小（连点次数见 `PclSkinSettings`）。 */
