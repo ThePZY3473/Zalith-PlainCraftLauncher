@@ -28,6 +28,7 @@
 package com.zalith.pcl.game.download.assets.platform
 
 import android.util.Log
+import com.zalith.pcl.BuildKeys
 import com.zalith.pcl.game.addons.mirror.MirrorPriority
 import com.zalith.pcl.game.addons.mirror.resolveMirrorPriority
 import com.zalith.pcl.game.download.assets.mapExceptionToMessage
@@ -128,10 +129,18 @@ fun mirroredCurseForgeSource(
     // 选了镜像却一直走官方，界面上看不出任何区别，只会让人以为切换没生效。
     val mirrorSource = mirrorCurseForgeSearcher
         .takeIf { enabledMirror || preferred == MirrorSourceType.MIRROR }
-    return when (source) {
-        MirrorPriority.OFFICIAL -> listOf(curseForgeSearcher)
-        MirrorPriority.MIRROR_FIRST ->
-            listOfNotNull(mirrorSource, curseForgeSearcher)
+
+    // 官方接口必须带 `x-api-key`，而密钥只在正式版构建里注入（`.curseforge_api.txt`）。
+    // 开源 / debug 构建没有密钥，访问 api.curseforge.com 一定 403
+    // （表现为「搜索失败：(403) 您没有权限访问此资源」）。
+    // 所以没密钥时**根本不排官方源**，直接走 MCIM 镜像 —— 宁可慢一点，也别给用户一个
+    // 一眼看不懂的 403。正式版有密钥时行为不变。
+    val officialAvailable = BuildKeys.CURSEFORGE_API.isNotBlank()
+
+    return when {
+        !officialAvailable -> listOf(mirrorCurseForgeSearcher)
+        source == MirrorPriority.OFFICIAL -> listOf(curseForgeSearcher)
+        else -> listOfNotNull(mirrorSource, curseForgeSearcher)
     }
 }
 
