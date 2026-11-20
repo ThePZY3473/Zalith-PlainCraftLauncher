@@ -1,11 +1,17 @@
 # 第三方组件与许可
 
-本项目在 Zalith Launcher 2 的基础上二次开发，下列组件随源码或安装包一同分发。
-本页只做署名与许可记录；具体条款以各自的官方仓库为准。
+本项目在 Zalith Launcher 2 的基础上二次开发。此页记录继承自上游或在本项目中使用的第三方组件、署名与许可证入口，不是某个 APK 的完整物料清单。实际使用范围和许可条款以该构建所用的版本、随附声明及许可证正文为准。
 
-> 本文件由原 `README.md` 的「引用开源项目」一节拆出，内容未改动。
+## 随仓库跟踪的预编译依赖
 
-本软件使用以下开源库:
+| 仓库文件 | 权利人及许可证 | 上游源码与声明 |
+|---|---|---|
+| `ZalithLauncher/libs/MobileGlues-release.aar` | Copyright © 2025–2026 MobileGL-Dev；GNU LGPL 2.1 | [源码](https://github.com/MobileGL-Dev/MobileGlues) · [许可证正文](https://github.com/MobileGL-Dev/MobileGlues/blob/main/LICENSE) · [上游列出的第三方组件](https://github.com/MobileGL-Dev/MobileGlues#third-party-components) |
+| `ZalithLauncher/libs/SimpleFPEWrapper-release.aar` | Copyright © 2026 MobileGL-Dev；GNU LGPL 3.0 | [源码](https://github.com/MobileGL-Dev/SimpleFPEWrapper) · [许可证声明](https://github.com/MobileGL-Dev/SimpleFPEWrapper/blob/main/LICENSE) · [COPYING](https://github.com/MobileGL-Dev/SimpleFPEWrapper/blob/main/COPYING) · [COPYING.LESSER](https://github.com/MobileGL-Dev/SimpleFPEWrapper/blob/main/COPYING.LESSER) |
+
+上述文件名不含组件版本；此处的署名对照 Zalith Launcher 2.8.1 的清单与组件上游声明整理，链接仅用于定位项目，**尚未确认每个 AAR 对应的确切源码标签或提交**。分发这些预编译件或包含它们的 APK 前，应记录各二进制对应的版本或提交及构建来源，并按适用许可保留版权和许可文本、提供所需的对应源码，以及适用的替换或重新链接说明。仓库中的其他预编译依赖（例如 JNA 原生库、运行时归档）也需要按实际分发内容核对。
+
+## 其他组件
 
 | Library                               | Copyright                                                                                                     | License              | Official Link                                                                     |
 |---------------------------------------|---------------------------------------------------------------------------------------------------------------|----------------------|-----------------------------------------------------------------------------------|
@@ -17,7 +23,7 @@
 | Apache Commons Compress               | -                                                                                                             | Apache 2.0           | [链接↗](https://commons.apache.org/proper/commons-compress)                        |
 | Apache Commons IO                     | -                                                                                                             | Apache 2.0           | [链接↗](https://commons.apache.org/proper/commons-io)                              |
 | ByteHook                              | Copyright © 2020-2024 ByteDance, Inc.                                                                         | MIT License          | [链接↗](https://github.com/bytedance/bhook)                                        |
-| BuildKeys                             | Copyright © 2026 MovTery                                                                                      | Aoache 2.0           | [链接↗](https://github.com/MovTery/BuildKeys)                                      |
+| BuildKeys                             | Copyright © 2026 MovTery                                                                                      | Apache 2.0           | [链接↗](https://github.com/MovTery/BuildKeys)                                      |
 | Coil Compose                          | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |
 | Coil Gifs                             | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |
 | Coil SVG                              | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |

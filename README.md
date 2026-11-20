@@ -9,8 +9,7 @@
 
 > 当前版本：**1.5.4（versionCode 200087）**，基于上游 Zalith Launcher 2 **2.8.1**
 > 本项目是 Zalith Launcher 2 的**非官方修改版**，与上游官方无关联。
-> 依 GPLv3 第 7 条附加条款，名称中不含上游原名 `ZalithLauncher` 及其缩写 `ZL`，
-> 并在启动页与关于页标注「非官方修改版」。
+> 对外名称为 ZPCL Launcher；上游 GPLv3 第 7 条附加条款与当前界面标注位置见 [NOTICE.md](NOTICE.md)。
 
 修改声明、与上游的边界、名称与标识的处理、问题该提给谁，都写在 **[NOTICE.md](NOTICE.md)**。
 本文件只讲这个启动器本身。
@@ -42,7 +41,7 @@
 
 - **原版游戏**：选版本 → 装游戏本体，可同时安装 Fabric / Forge / NeoForge / Quilt / OptiFine
 - **社区资源**：Mod / 整合包 / 资源包 / 光影包 / 存档
-  - 来源默认 **Modrinth**（免密钥）；CurseForge 需要 `x-api-key`，本构建不内置，选中会拿不到结果
+  - 默认来源是 **Modrinth**。CurseForge 官方接口需要 `x-api-key`；开发版未配置 Key 时，CurseForge 搜索使用镜像，不请求官方接口。
   - 默认 **32 条并发连接**，可在「设置 → 下载 → 最大线程数」调整，下一次下载生效
   - 下载源可切「自动 / 官方 / 镜像」，失败会自动换源重试
 
@@ -60,7 +59,7 @@
 
 ### 插件
 
-启动器把外观和扩展功能拆给了插件（APK 形式，随包装进 `assets/zplugin/`）：
+启动器支持单独安装的插件 APK；插件清单和资源放在**插件自身**的 `assets/zplugin/`，不是开发版内置主题：
 
 - **皮肤插件**：换配色、圆角、玻璃质感，可选接管部分版块页面
 - **自带界面插件**：`entry: true` 的插件会在首页多一个胶囊入口，页面内容由插件自己声明
@@ -73,22 +72,17 @@
 
 ## 两条产线
 
-仓库里有两份同构工程，改动需要手动同步：
+本仓库维护开发线；正式发行使用单独的工程，两条线的代码和发布制品须分别核对。
 
-| | `Zalith-PlainCraftLauncher/` | `Zalith-PlainCraftLauncher-Release/` |
+| | 开发线 | 正式线 |
 |---|---|---|
-| 用途 | 日常开发、调试 | 对外发布 |
-| 包名 | `com.zalith.pcl.debug` | `com.zalith.pcl` |
-| 构建类型 | debug | release（正式签名） |
-| 正版（微软）登录 | 无 | 有 |
-| 隐藏主题 | 无 | 有 |
+| 用途 | 日常开发、调试 | 对外发行 |
+| 应用包名 | `com.zpcl.launcher.debug` | `com.zpcl.launcher` |
+| 常用构建类型 | Debug | Release |
+| 微软正版登录 | 保留登录代码；默认不配置 Client ID | 发行构建按需配置 Client ID |
+| 内置主题切换及解锁 | 不包含；保留默认配色和外部皮肤插件接口 | 正式线独有 |
 
-比对两条线时务必带 `--strip-trailing-cr`，否则 CRLF 差异会把结果淹掉：
-
-```bash
-diff -rq --strip-trailing-cr Zalith-PlainCraftLauncher/ZalithLauncher/src \
-                       Zalith-PlainCraftLauncher-Release/ZalithLauncher/src
-```
+`assembleRelease` 只是构建当前工程的 Gradle Release 变体，不会把开发线变成正式线，也不会补上正式线独有功能。
 
 ---
 
@@ -108,31 +102,28 @@ diff -rq --strip-trailing-cr Zalith-PlainCraftLauncher/ZalithLauncher/src \
 export JAVA_HOME=/path/to/jdk17
 ./gradlew :ZalithLauncher:assembleDebug -Darch=arm64
 
-# 正式包（需要签名配置，见下）
+# 在当前工程构建 Release 变体（仍需本地签名配置）
 ./gradlew :ZalithLauncher:assembleRelease -Darch=arm64
 ```
 
-`-Darch` 只认这四个值：`arm`、`arm64`、`x86`、`x86_64`；不传则打包含全部 ABI 的包（约 400 MB）。
+`-Darch` 可指定 `arm`、`arm64`、`x86`、`x86_64`；使用 `all` 或不传则构建包含全部 ABI 的包。
 
 | 传入 | 产物 |
 |---|---|
-| `arm64` | `ZalithLauncher-<版本>-arm64-v8a.apk` |
-| `arm` | `ZalithLauncher-<版本>-armeabi-v7a.apk` |
+| `arm64` | `arm64-v8a` |
+| `arm` | `armeabi-v7a` |
 | `x86` / `x86_64` | 对应架构 |
 | 不传 | 全 ABI（无架构后缀） |
 
-产物在 `ZalithLauncher/build/outputs/apk/{debug,release}/`。
+产物在 `ZalithLauncher/build/outputs/apk/{debug,release}/`，文件名以 `ZPCL-Launcher-` 开头，Debug 包额外带有 `Debug-`。
 
 ### 签名
 
-正式包读取 `ZalithLauncher/build.gradle.kts` 里 `signingConfigs` 配置的 keystore，
-密码从 `.store_password.txt` / `.key_password.txt`（或环境变量）读取，两者都在 `.gitignore` 中。
-**签名文件请自行备份**：换签名后已安装的用户必须卸载重装，且无法覆盖升级。
+当前工程的 Debug 和 Release 变体均使用 `ZalithLauncher/build.gradle.kts` 中的本地签名配置。公开源码不含项目签名私钥；从干净克隆构建时，需要在本地使用自己的 keystore 和别名、密码，或为自己的 Debug 构建改用 Android 默认调试签名。项目签名使用的密码可通过 `STORE_PASSWORD` / `KEY_PASSWORD` 或受 Git 忽略的本地文件配置。请勿提交签名文件或密码；不同签名的 APK 不能直接覆盖安装。
 
-### 微软登录
+### 微软登录和 CurseForge
 
-源码不携带任何 OAuth `client_id`。需要正版登录（仅正式线）时，把 Azure 应用的客户端 ID 写进
-`.oauth_client_id.txt`，或设置环境变量 `OAUTH_CLIENT_ID` 后再构建。未配置时离线登录不受影响。
+开发源码不内置项目的微软 OAuth Client ID 或 CurseForge API Key。构建脚本可从环境变量 `OAUTH_CLIENT_ID` / `CURSEFORGE_API_KEY` 或仓库根目录受 Git 忽略的 `.oauth_client_id.txt` / `.curseforge_api.txt` 读取配置，**目前不会按 Debug / Release 变体隔离这些输入**。维护者仅在正式线构建环境提供项目专用配置；未配置 Client ID 时离线登录不受影响。
 
 ---
 
@@ -164,21 +155,21 @@ export JAVA_HOME=/path/to/jdk17
 | `docs/THIRD_PARTY.md` | 第三方组件与许可清单 |
 | `latest_version_md.json` | 应用内「检查更新」读取的版本清单 |
 | `CardGrid/` `ColorPicker/` `InputMap/` `LayerController/` `LWJGL/` `Terracotta/` | 渲染、输入、联机等子模块 |
-| `.github/workflows/` | CI：编译校验与推送检查（不含打包上传） |
+| `.github/workflows/` | GitHub Actions：推送时只做 Debug 编译校验，不注入发行配置、不上传 APK |
 
 ---
 
 ## 版本与发布
 
-本仓库**只承载源代码**，不存放安装包：仓库与 GitHub Releases 都不挂 APK，
-分发包由官网（`url_home` 指向的站点）自行提供。
+本仓库用于公开开发源码，不将启动器 APK 提交到 Git 或作为 GitHub Release 附件。仓库仍跟踪部分构建所用的预编译依赖；它们不是启动器安装包，也不是源码，其来源与许可见 [第三方组件清单](docs/THIRD_PARTY.md)。
 
-1. 改 `ZalithLauncher/gradle.properties` 的 `launcher_version_name` / `launcher_version_code`
-   —— **versionCode 必须递增**，否则已安装的设备无法覆盖升级；两条产线都要改
-2. 同步改 `latest_version_md.json` 的 `version` / `code`，并在 `default_body` 里写这一版的说明
-   （应用内「检查更新」读的就是它）
-3. 需要打标签时：`git tag -a v<版本> -m "ZPCL Launcher <版本>" && git push origin main --tags`
-   —— 标签只标记源码节点，不触发任何上传安装包的流水线
+**关于 CI：** 推送触发的 [构建工作流](.github/workflows/push_ci.yml) 只做 Debug 编译校验，不向 Debug 构建注入正版登录或 CurseForge 配置，也不上传 APK 产物。只有以 `Release` 变体调用时才使用仓库 Secrets；这类构建由维护者自己发起，不构成公开下载渠道。
+
+正式发行时：
+
+1. 维护 `ZalithLauncher/gradle.properties` 的显示版本与 `versionCode`；要覆盖升级，`versionCode` 必须递增。
+2. 仅在计划推送客户端更新时同步 `latest_version_md.json` 的版本、`code` 和更新说明。
+3. 在 APK 下载处注明该具体制品对应的源码提交、标签或归档，不以开发分支或仓库首页代替正式 APK 的对应源。详见 [NOTICE.md](NOTICE.md)。
 
 `launcher_name` 与 `CLIENT_TOKEN_SEED` 属于登录与数据目录的标识，**不要修改**。
 
@@ -188,7 +179,7 @@ export JAVA_HOME=/path/to/jdk17
 
 - 仅支持 Android（`minSdk 26`）；iOS / 桌面端不在范围内
 - CurseForge 官方接口需要 `x-api-key`，未内置时只能使用 Modrinth 或镜像
-- 正版登录只在正式线可用，且必须自备 `client_id`
+- 开发线默认未配置微软登录 Client ID，离线和第三方认证不受影响。
 - 皮肤插件同一时间只生效一个；多个一起启用会互相覆盖外观
 - 插件升级后必须让插件 APK 的 `versionCode` 递增，否则启动器不会重新解包（界面会停留在旧配置）
 
@@ -196,8 +187,7 @@ export JAVA_HOME=/path/to/jdk17
 
 ## 许可与致谢
 
-本项目遵循 **[GPL-3.0](LICENSE)**。上游在 GPLv3 第 7 条下附有名称与标注要求，本仓库已照办：
-名称不使用上游原名及缩写，启动页与关于页标注「非官方修改版」。
+本项目按 **[GNU GPLv3](LICENSE)** 分发，是 Zalith Launcher 2 的非官方修改版。程序在适用法律允许的范围内按现状提供，不附带担保。上游的名称、标注与版权告知要求，以及当前版本的实际标注位置，见下方修改声明。
 
 修改声明、名称处理、源码获取与署名见 **[NOTICE.md](NOTICE.md)**；第三方组件与许可见
 **[docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)**。

@@ -27,10 +27,12 @@ jobs:
       fail-fast: false
 
     env:
-      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-      OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
-      CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+      # 推送触发的 Debug 构建只做编译校验：不注入正版登录 / CurseForge 配置，
+      # 避免公开仓库的构建产物携带发行线专用凭据。
+      KEY_PASSWORD: ${{ inputs.variant == 'Release' && secrets.KEY_PASSWORD || '' }}
+      STORE_PASSWORD: ${{ inputs.variant == 'Release' && secrets.STORE_PASSWORD || '' }}
+      OAUTH_CLIENT_ID: ${{ inputs.variant == 'Release' && secrets.OAUTH_CLIENT_ID || '' }}
+      CURSEFORGE_API_KEY: ${{ inputs.variant == 'Release' && secrets.CURSEFORGE_API_KEY || '' }}
 
     steps:
       - name: Checkout
@@ -104,10 +106,4 @@ jobs:
           name: mapping (${{ matrix.arch }})
           path: ZalithLauncher/build/outputs/mapping/release/mapping.txt
 
-      - name: Upload Debug APK for ${{ matrix.arch }}
-        if: inputs.variant == 'Debug'
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: debug apk (${{ matrix.arch }})
-          path: ZalithLauncher/build/outputs/apk/debug/*.apk
+      # 刻意不保留 Debug APK 的上传：本仓库只公开源码，构建日志与编译结果足以做校验。
