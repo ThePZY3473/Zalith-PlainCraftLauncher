@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,7 +53,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zalith.pcl.R
-import com.zalith.pcl.filemanager.ui.components.FmAlertDialog
 import com.zalith.pcl.filemanager.ui.components.FmCheckEditDialog
 import com.zalith.pcl.filemanager.ui.components.FmDialogSurface
 import com.zalith.pcl.filemanager.ui.components.FmIcons
@@ -61,6 +60,7 @@ import com.zalith.pcl.filemanager.ui.theme.fmSecondaryTextColor
 import com.zalith.pcl.filemanager.viewmodel.SearchHitView
 import com.zalith.pcl.filemanager.viewmodel.SearchUiState
 import com.zalith.pcl.ui.components.MarqueeText
+import com.zalith.pcl.ui.components.SimpleAlertDialog
 import com.zalith.pcl.ui.components.fadeEdge
 import com.zalith.pcl.ui.components.lazyScrollWithBar
 
@@ -120,7 +120,7 @@ fun FmSearchTaskDialog(
     searchUi: SearchUiState,
     onCancel: () -> Unit
 ) {
-    FmAlertDialog(
+    SimpleAlertDialog(
         title = stringResource(R.string.generic_search),
         text = {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,6 +59,7 @@ import com.zalith.pcl.ui.pcl2.components.PclDialogButton
 import com.zalith.pcl.R
 import com.zalith.pcl.ui.components.MarqueeText
 import com.zalith.pcl.ui.components.rememberDialogMaxHeight
+import com.zalith.pcl.ui.screens.main.control_editor.orUnspecified
 import com.zalith.pcl.ui.theme.cardColor
 import com.zalith.pcl.ui.theme.itemColor
 import com.zalith.pcl.ui.theme.onCardColor
@@ -239,7 +240,7 @@ private fun SelectLayerListItem(
         Text(
             modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
             maxLines = 1,
-            text = layer.name,
+            text = layer.name.orUnspecified(),
             style = MaterialTheme.typography.labelLarge
         )
     }

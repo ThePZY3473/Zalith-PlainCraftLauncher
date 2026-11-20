@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Icon
@@ -45,7 +44,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.zalith.pcl.R
 import com.zalith.pcl.bridge.CursorShape
@@ -56,6 +54,7 @@ import com.zalith.pcl.coroutine.TaskSystem
 import com.zalith.pcl.setting.AllSettings
 import com.zalith.pcl.setting.enums.GestureActionType
 import com.zalith.pcl.setting.enums.MouseControlMode
+import com.zalith.pcl.setting.enums.MouseTouchBlockMode
 import com.zalith.pcl.setting.unit.ParcelableSettingUnit
 import com.zalith.pcl.setting.unit.floatRange
 import com.zalith.pcl.ui.androidText
@@ -67,6 +66,7 @@ import com.zalith.pcl.ui.components.MarqueeText
 import com.zalith.pcl.ui.components.SimpleAlertDialog
 import com.zalith.pcl.ui.components.TitleAndSummary
 import com.zalith.pcl.ui.components.TooltipIconButton
+import com.zalith.pcl.ui.components.animated
 import com.zalith.pcl.ui.components.infiniteShimmer
 import com.zalith.pcl.ui.components.verticalScrollWithBar
 import com.zalith.pcl.ui.control.gyroscope.isGyroscopeAvailable
@@ -119,12 +119,12 @@ fun ControlSettingsScreen(
                 .verticalScrollWithBar(state = rememberScrollState())
                 .padding(all = 12.dp),
             isVisible = isVisible
-        ) { scope ->
-            AnimatedItem(scope) { yOffset ->
+        ) {
+            AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                        .animated(ctx)
                 ) {
                     SwitchSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -167,11 +167,11 @@ fun ControlSettingsScreen(
                 }
             }
 
-            AnimatedItem(scope) { yOffset ->
+            AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                        .animated(ctx)
                 ) {
                     val mouseSize = AllSettings.mouseSize.state
 
@@ -307,11 +307,11 @@ fun ControlSettingsScreen(
                 }
             }
 
-            AnimatedItem(scope) { yOffset ->
+            AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                        .animated(ctx)
                 ) {
                     SwitchSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -337,6 +337,16 @@ fun ControlSettingsScreen(
                         items = MouseControlMode.entries,
                         title = stringResource(R.string.settings_control_mouse_control_mode_title),
                         summary = stringResource(R.string.settings_control_mouse_control_mode_summary),
+                        getItemText = { stringResource(it.nameRes) }
+                    )
+
+                    ListSettingsCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        position = CardPosition.Middle,
+                        unit = AllSettings.mouseTouchBlockMode,
+                        items = MouseTouchBlockMode.entries,
+                        title = stringResource(R.string.settings_control_mouse_block_touch_title),
+                        summary = stringResource(R.string.settings_control_mouse_block_touch_summary),
                         getItemText = { stringResource(it.nameRes) }
                     )
 
@@ -375,11 +385,11 @@ fun ControlSettingsScreen(
                 }
             }
 
-            AnimatedItem(scope) { yOffset ->
+            AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                        .animated(ctx)
                 ) {
                     SwitchSettingsCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -425,11 +435,11 @@ fun ControlSettingsScreen(
                 }
             }
 
-            AnimatedItem(scope) { yOffset ->
+            AnimatedItem { ctx ->
                 SettingsCardColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                        .animated(ctx)
                 ) {
                     //检查陀螺仪是否可用
                     val context = LocalContext.current

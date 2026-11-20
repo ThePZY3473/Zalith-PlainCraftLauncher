@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,7 +48,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.ui.NavDisplay
 import com.google.gson.JsonSyntaxException
 import com.zalith.pcl.BuildKeys
 import com.zalith.pcl.R
@@ -63,10 +62,12 @@ import com.zalith.pcl.game.version.export.data.getSelectedFiles
 import com.zalith.pcl.game.version.installed.Version
 import com.zalith.pcl.game.version.installed.VersionsManager
 import com.zalith.pcl.ui.base.BaseScreen
+import com.zalith.pcl.ui.base.VersionViewModelStoreScope
 import com.zalith.pcl.ui.components.MarqueeText
 import com.zalith.pcl.ui.components.SimpleAlertDialog
 import com.zalith.pcl.ui.components.fadeEdge
 import com.zalith.pcl.ui.components.verticalScrollWithBar
+import com.zalith.pcl.ui.screens.NestedNavDisplay
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.NormalNavKey
 import com.zalith.pcl.ui.screens.TitledNavKey
@@ -379,36 +380,38 @@ fun VersionExportScreen(
         }
     }
 
-    val viewModel = rememberExportModpackViewModel(version = key.version)
+    VersionViewModelStoreScope(version = key.version) {
+        val viewModel = rememberExportModpackViewModel(version = key.version)
 
-    val packExporter by viewModel.packExporter.collectAsStateWithLifecycle()
-    val exportOperation by viewModel.packExportOperation.collectAsStateWithLifecycle()
-    PackExportOperation(
-        operation = exportOperation,
-        onChange = { new ->
-            viewModel.updateOperation(new)
-        },
-        packExporter = packExporter,
-        onCancel = {
-            viewModel.cancelExport()
-        }
-    )
-
-    BaseScreen(
-        screenKey = key,
-        currentKey = backScreenViewModel.mainScreen.currentKey
-    ) {
-        NavigationUI(
-            modifier = Modifier.fillMaxSize(),
-            viewModel = viewModel,
-            key = key,
-            backScreenViewModel = backScreenViewModel,
-            eventViewModel = eventViewModel,
-            exportScreenKey = key.currentKey,
-            onCurrentKeyChange = { key.currentKey = it },
-            backToMainScreen = backToMainScreen,
-            version = key.version
+        val packExporter by viewModel.packExporter.collectAsStateWithLifecycle()
+        val exportOperation by viewModel.packExportOperation.collectAsStateWithLifecycle()
+        PackExportOperation(
+            operation = exportOperation,
+            onChange = { new ->
+                viewModel.updateOperation(new)
+            },
+            packExporter = packExporter,
+            onCancel = {
+                viewModel.cancelExport()
+            }
         )
+
+        BaseScreen(
+            screenKey = key,
+            currentKey = backScreenViewModel.mainScreen.currentKey
+        ) {
+            NavigationUI(
+                modifier = Modifier.fillMaxSize(),
+                viewModel = viewModel,
+                key = key,
+                backScreenViewModel = backScreenViewModel,
+                eventViewModel = eventViewModel,
+                exportScreenKey = key.currentKey,
+                onCurrentKeyChange = { key.currentKey = it },
+                backToMainScreen = backToMainScreen,
+                version = key.version
+            )
+        }
     }
 }
 
@@ -433,7 +436,8 @@ private fun NavigationUI(
     }
 
     if (backStack.isNotEmpty()) {
-        NavDisplay(
+        NestedNavDisplay(
+            ownerKey = key,
             backStack = backStack,
             modifier = modifier,
             onBack = {

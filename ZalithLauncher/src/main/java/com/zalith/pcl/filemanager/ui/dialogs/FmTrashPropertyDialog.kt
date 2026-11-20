@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,9 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.zalith.pcl.R
-import com.zalith.pcl.filemanager.ui.components.FmAlertDialog
 import com.zalith.pcl.filemanager.ui.components.PropertyRow
 import com.zalith.pcl.filemanager.viewmodel.DirScanUiState
+import com.zalith.pcl.ui.components.SimpleAlertDialog
 import com.zalith.pcl.utils.file.formatFileSize
 
 /**
@@ -54,7 +54,7 @@ fun FmTrashPropertyDialog(
 ) {
     val dirStats = dirScan?.stats
 
-    FmAlertDialog(
+    SimpleAlertDialog(
         title = stringResource(R.string.fm_property),
         text = {
             Column(

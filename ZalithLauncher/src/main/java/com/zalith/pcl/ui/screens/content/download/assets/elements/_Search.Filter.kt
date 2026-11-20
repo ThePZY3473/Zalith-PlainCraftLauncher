@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,7 +45,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -79,7 +78,6 @@ import com.zalith.pcl.game.download.assets.platform.Platform
 import com.zalith.pcl.game.download.assets.platform.PlatformDisplayLabel
 import com.zalith.pcl.game.download.assets.platform.PlatformFilterCode
 import com.zalith.pcl.game.download.assets.platform.PlatformSortField
-import com.zalith.pcl.game.download.assets.utils.ModTranslations
 import com.zalith.pcl.setting.AllSettings
 import com.zalith.pcl.ui.components.LittleTextLabel
 import com.zalith.pcl.ui.components.OwnOutlinedTextField
@@ -87,6 +85,7 @@ import com.zalith.pcl.ui.screens.content.elements.backgroundGlass
 import com.zalith.pcl.ui.theme.cardColor
 import com.zalith.pcl.ui.theme.onCardColor
 import com.zalith.pcl.utils.animation.getAnimateTween
+import org.jackhuang.hmcl.addon.AddonProjectInfo
 
 /**
  * 搜索资源过滤器UI
@@ -105,7 +104,6 @@ import com.zalith.pcl.utils.animation.getAnimateTween
  * @param onModLoaderChange 模组加载器变更时
  * @param extraFilter 额外的过滤器UI
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchFilter(
     modifier: Modifier = Modifier,
@@ -116,7 +114,7 @@ fun SearchFilter(
     searchName: String,
     onSearchNameChange: (String) -> Unit = {},
     onSearch: () -> Unit,
-    searchedMcMods: List<ModTranslations.McMod>,
+    searchedMcMods: List<AddonProjectInfo>,
     searchedVersions: List<String>,
     gameVersion: String,
     onGameVersionChange: (String) -> Unit = {},
@@ -145,21 +143,21 @@ fun SearchFilter(
                 suggestions = searchedMcMods,
                 suggestionLabel = { item ->
                     Text(
-                        item.name,
+                        item.mainName(),
                         style = MaterialTheme.typography.labelMedium
                     )
                     //英文名/次要名称
-                    if (item.subname.isNotBlank()) {
+                    if (item.subName().isNotBlank()) {
                         Text(
                             modifier = Modifier.alpha(0.7f),
-                            text = item.subname,
+                            text = item.subName(),
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
                 },
                 onSuggestionClick = { item ->
                     onSearchNameChange(
-                        item.subname.ifEmpty { item.abbr }
+                        item.subName().ifEmpty { item.abbrName() }
                     )
                     onSearch()
                     onSearch()
@@ -271,7 +269,6 @@ enum class FilterSelectionMode {
     Multiple
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun <E> SuggestionsText(
     value: String,
@@ -617,7 +614,7 @@ private fun FilterListItem(
     onCheckedChange: (Boolean) -> Unit
 ) {
     val onClick = {
-        val newValue = if (selectionMode == FilterSelectionMode.Multiple) !selected else true
+        val newValue = selectionMode != FilterSelectionMode.Multiple || !selected
         onCheckedChange(newValue)
     }
 

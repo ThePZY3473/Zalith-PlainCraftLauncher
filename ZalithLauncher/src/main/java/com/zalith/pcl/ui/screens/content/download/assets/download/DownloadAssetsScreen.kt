@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,7 +54,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -72,7 +70,6 @@ import com.zalith.pcl.game.download.assets.platform.getProject
 import com.zalith.pcl.game.download.assets.platform.getVersionById
 import com.zalith.pcl.game.download.assets.platform.getVersions
 import com.zalith.pcl.game.download.assets.platform.isAllNull
-import com.zalith.pcl.game.download.assets.utils.ModTranslations
 import com.zalith.pcl.game.download.assets.utils.getMcmodTitle
 import com.zalith.pcl.game.download.assets.utils.getTranslations
 import com.zalith.pcl.game.version.mod.InstalledMod
@@ -80,11 +77,14 @@ import com.zalith.pcl.game.versioninfo.filterRelease
 import com.zalith.pcl.ui.AndroidStringText
 import com.zalith.pcl.ui.androidText
 import com.zalith.pcl.ui.base.BaseScreen
+import com.zalith.pcl.ui.components.AnimatedDirection
 import com.zalith.pcl.ui.components.BackgroundCard
 import com.zalith.pcl.ui.components.CheckChip
 import com.zalith.pcl.ui.components.ScalingLabel
 import com.zalith.pcl.ui.components.ShimmerBox
 import com.zalith.pcl.ui.components.SimpleTextInputField
+import com.zalith.pcl.ui.components.animated
+import com.zalith.pcl.ui.components.rememberAnimatedContext
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.NormalNavKey
 import com.zalith.pcl.ui.screens.TitledNavKey
@@ -101,7 +101,6 @@ import com.zalith.pcl.ui.screens.content.download.assets.elements.VersionInfoMap
 import com.zalith.pcl.ui.screens.content.download.assets.elements.initAll
 import com.zalith.pcl.ui.screens.content.download.assets.elements.mapWithVersions
 import com.zalith.pcl.ui.theme.onCardColor
-import com.zalith.pcl.utils.animation.swapAnimateDpAsState
 import com.zalith.pcl.viewmodel.EventViewModel
 import io.ktor.client.plugins.ClientRequestException
 import kotlinx.coroutines.CancellationException
@@ -112,6 +111,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import org.jackhuang.hmcl.addon.AddonProjectInfo
 import kotlin.time.Duration.Companion.milliseconds
 
 private class DownloadScreenViewModel(
@@ -218,7 +218,7 @@ private class DownloadScreenViewModel(
     }
 
     //项目信息
-    var projectResult by mutableStateOf<DownloadAssetsState<Triple<PlatformProject, ModTranslations, ModTranslations.McMod?>>>(DownloadAssetsState.Getting())
+    var projectResult by mutableStateOf<DownloadAssetsState<Pair<PlatformProject, AddonProjectInfo?>>>(DownloadAssetsState.Getting())
 
     fun getProject() {
         viewModelScope.launch {
@@ -233,9 +233,8 @@ private class DownloadScreenViewModel(
                         classes = accurateClasses
                         remapVersions()
                     }
-                    val mod = classes.getTranslations()
-                    val mcmod = mod.getModBySlugId(result.platformSlug())
-                    projectResult = DownloadAssetsState.Success(Triple(result, mod, mcmod))
+                    val mcmod = classes.getTranslations()?.getInfoByCurseForgeId(result.platformSlug())
+                    projectResult = DownloadAssetsState.Success(Pair(result, mcmod))
                 },
                 onError = { state, _ ->
                     projectResult = state
@@ -362,12 +361,12 @@ fun DownloadAssetsScreen(
         Row(
             modifier = Modifier.fillMaxSize()
         ) {
-            val yOffset by swapAnimateDpAsState(targetValue = (-40).dp, swapIn = isVisible)
+            val versionCtx = rememberAnimatedContext(isVisible = isVisible)
             Versions(
                 modifier = Modifier
                     .weight(versionsUIWeight)
                     .fillMaxHeight()
-                    .offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
+                    .animated(versionCtx),
                 viewModel = viewModel,
                 installedChecker = installedChecker,
                 onReload = { viewModel.getVersions() },
@@ -389,18 +388,14 @@ fun DownloadAssetsScreen(
                 },
             )
 
-            val xOffset by swapAnimateDpAsState(
-                targetValue = 40.dp,
-                swapIn = isVisible,
-                isHorizontal = true
-            )
+            val projectCtx = rememberAnimatedContext(isVisible = isVisible)
             ProjectInfo(
                 modifier = Modifier
                     .weight(projectUIWeight)
                     .fillMaxHeight()
                     .padding(vertical = 12.dp)
                     .padding(end = 12.dp)
-                    .offset { IntOffset(x = xOffset.roundToPx(), y = 0) },
+                    .animated(projectCtx, from = AnimatedDirection.Right),
                 projectResult = viewModel.projectResult,
                 platform = key.platform,
                 projectId = key.projectId,
@@ -569,7 +564,7 @@ private fun Versions(
 @Composable
 private fun ProjectInfo(
     modifier: Modifier = Modifier,
-    projectResult: DownloadAssetsState<Triple<PlatformProject, ModTranslations, ModTranslations.McMod?>>,
+    projectResult: DownloadAssetsState<Pair<PlatformProject, AddonProjectInfo?>>,
     platform: Platform,
     projectId: String,
     classes: PlatformClasses,
@@ -627,7 +622,7 @@ private fun ProjectInfo(
                     }
                 }
                 is DownloadAssetsState.Success -> {
-                    val (project, mod, mcmod) = projectResult.result
+                    val (project, mcmod) = projectResult.result
                     //项目基本信息
                     val platform = remember { project.platform() }
                     val iconUrl = remember { project.platformIconUrl() }
@@ -692,7 +687,6 @@ private fun ProjectInfo(
                                         platform = platform,
                                         urls = urls,
                                         mcmod = mcmod,
-                                        mod = mod,
                                         openLink = openLink,
                                     )
                                 }

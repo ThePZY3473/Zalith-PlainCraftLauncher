@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,6 +48,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,19 +76,25 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.movtery.cardgrid.state.rememberCardGridState
 import com.movtery.guide.GuideSide
 import com.movtery.guide.guideNode
+import com.movtery.petlib.PetAnimation
+import com.movtery.petlib.PetTapReaction
 import com.zalith.pcl.R
 import com.zalith.pcl.game.account.Account
 import com.zalith.pcl.game.account.AccountsManager
 import com.zalith.pcl.game.account.getAccountTypeName
+import com.zalith.pcl.game.account.wardrobe.toArmModel
 import com.zalith.pcl.game.version.installed.Version
 import com.zalith.pcl.game.version.installed.VersionsManager
 import com.zalith.pcl.setting.AllSettings
 import com.zalith.pcl.setting.enums.ActionMenuSide
 import com.zalith.pcl.ui.base.BaseScreen
+import com.zalith.pcl.ui.components.AnimatedDirection
 import com.zalith.pcl.ui.components.BackgroundCard
 import com.zalith.pcl.ui.components.MarqueeText
+import com.zalith.pcl.ui.components.PetModelView
 import com.zalith.pcl.ui.components.ScalingActionButton
-import com.zalith.pcl.ui.components.SkinPreview3D
+import com.zalith.pcl.ui.components.animated
+import com.zalith.pcl.ui.components.rememberAnimatedContext
 import com.zalith.pcl.ui.guide.GuideKeys
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.NormalNavKey
@@ -99,10 +106,12 @@ import com.zalith.pcl.ui.screens.content.home.LocalActionMenuDrag
 import com.zalith.pcl.ui.screens.content.home.actionMenuDragAnchor
 import com.zalith.pcl.ui.screens.content.home.actionMenuDragExclusion
 import com.zalith.pcl.ui.screens.content.home.rememberActionMenuDragState
+import com.zalith.pcl.ui.screens.content.home.server.LocalServerCardQuickPlay
 import com.zalith.pcl.ui.screens.content.home.version.LocalHomeCardLauncher
 import com.zalith.pcl.ui.screens.content.home.version.LocalHomeCardVersionSettings
-import com.zalith.pcl.utils.animation.swapAnimateDpAsState
 import com.zalith.pcl.viewmodel.ScreenBackStackViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val ContentWeight = 7f
@@ -118,6 +127,7 @@ fun LauncherScreen(
     backStackViewModel: ScreenBackStackViewModel,
     navigateToVersions: (Version) -> Unit,
     onLaunchGame: (Version?) -> Unit,
+    onQuickPlayServer: (Version?, String) -> Unit,
     onOpenLink: (String) -> Unit,
     startGuideOnce: (GuideKeys.Keys) -> Unit,
 ) {
@@ -193,20 +203,21 @@ fun LauncherScreen(
                         }
                     }
                 ) {
-                    ContentMenu(
-                        modifier = Modifier
-                            .guideNode(
-                                key = GuideKeys.Main.Step.CardTip,
-                                holeRadius = 0.dp
-                            )
-                            .weight(ContentWeight)
-                            .offset { IntOffset(x = dragState.previewShift.value.roundToInt(), y = 0) },
-                        isVisible = isVisible,
-                        onLaunchGame = { version ->
-                            onLaunchGame(version)
-                        },
-                        onOpenVersionSettings = navigateToVersions
-                    )
+                ContentMenu(
+                    modifier = Modifier
+                        .guideNode(
+                            key = GuideKeys.Main.Step.CardTip,
+                            holeRadius = 0.dp
+                        )
+                        .weight(ContentWeight)
+                        .offset { IntOffset(x = dragState.previewShift.value.roundToInt(), y = 0) },
+                    isVisible = isVisible,
+                    onLaunchGame = { version ->
+                        onLaunchGame(version)
+                    },
+                    onQuickPlayServer = onQuickPlayServer,
+                    onOpenVersionSettings = navigateToVersions
+                )
                 }
 
                 // ActionMenu 对接到了 End，留出空位
@@ -236,7 +247,7 @@ fun LauncherScreen(
                         isTaller = isActionMenuTaller,
                         dockedSide = dockedSide,
                         onLaunchGame = onLaunchGame,
-                        swapTargetValue = if (dockedSide == ActionMenuSide.END) 40.dp else (-40).dp,
+                        swapDirection = if (dockedSide == ActionMenuSide.END) AnimatedDirection.Right else AnimatedDirection.Left,
                         pickUpScale = { dragState.scale },
                         toAccountManageScreen = toAccountManageScreen,
                         toVersionManageScreen = toVersionManageScreen,
@@ -252,24 +263,24 @@ fun LauncherScreen(
 private fun ContentMenu(
     isVisible: Boolean,
     onLaunchGame: (Version) -> Unit,
+    onQuickPlayServer: (Version?, String) -> Unit,
     onOpenVersionSettings: (Version) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val yOffset by swapAnimateDpAsState(
-        targetValue = (-40).dp,
-        swapIn = isVisible
-    )
+    val ctx = rememberAnimatedContext(isVisible = isVisible)
     val gridState = rememberCardGridState()
 
     CompositionLocalProvider(
         LocalHomeCardLauncher provides onLaunchGame,
-        LocalHomeCardVersionSettings provides onOpenVersionSettings
+        LocalHomeCardVersionSettings provides onOpenVersionSettings,
+        LocalServerCardQuickPlay provides onQuickPlayServer
     ) {
         HomeGrid(
             state = gridState,
+            isVisible = isVisible,
             modifier = modifier
                 .fillMaxSize()
-                .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+                .animated(ctx)
         )
     }
 }
@@ -547,12 +558,6 @@ private fun ActionMenuTallerContent(
     toVersionSettingsScreen: () -> Unit,
 ) {
     val refreshWardrobe by AccountsManager.refreshWardrobe.collectAsStateWithLifecycle()
-    val skinFile = remember(account, refreshWardrobe) {
-        account?.getSkinFile()?.takeIf { it.exists() }
-    }
-    val capeFile = remember(account, refreshWardrobe) {
-        account?.getCapeFile()?.takeIf { it.exists() }
-    }
 
     Column(
         modifier = Modifier
@@ -565,17 +570,38 @@ private fun ActionMenuTallerContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-        val azimuth = (if (dockedSide == ActionMenuSide.START) -35 else 35) * (if (isRtl) -1 else 1)
+        // 偏航角符号与停泊侧相反，让模型面向屏幕内容一侧
+        val yaw = Math.toRadians(
+            ((if (dockedSide == ActionMenuSide.START) 35.0 else -(35.0)) * (if (isRtl) -1 else 1))
+        ).toFloat()
 
-        SkinPreview3D(
+        val armModel = account?.skinModelType?.toArmModel()
+        val skinStamp = account?.getSkinFile()?.lastModified()
+        val capeStamp = account?.getCapeFile()?.lastModified()
+        val skinBytes by produceState<ByteArray?>(null, account, refreshWardrobe, skinStamp) {
+            value = withContext(Dispatchers.IO) {
+                account?.getSkinFile()?.takeIf { it.exists() }
+                    ?.inputStream()?.use { it.readBytes() }
+            }
+        }
+        val capeBytes by produceState<ByteArray?>(null, account, refreshWardrobe, capeStamp) {
+            value = withContext(Dispatchers.IO) {
+                account?.getCapeFile()?.takeIf { it.exists() }
+                    ?.inputStream()?.use { it.readBytes() }
+            }
+        }
+
+        PetModelView(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            skinFile = skinFile,
-            capeFile = capeFile,
-            modelType = account?.skinModelType,
-            interactionEnabled = false,
-            azimuth = azimuth,
+            skin = skinBytes,
+            cape = capeBytes,
+            arm = armModel,
+            yaw = yaw,
+            animation = PetAnimation.Idle,
+            tapReaction = PetTapReaction.Interact,
+            dragYaw = false
         )
 
         BackgroundCard(
@@ -615,18 +641,14 @@ private fun ActionMenu(
     isTaller: Boolean,
     dockedSide: ActionMenuSide,
     onLaunchGame: (Version?) -> Unit,
-    swapTargetValue: Dp,
+    swapDirection: AnimatedDirection,
     pickUpScale: () -> Float,
     modifier: Modifier = Modifier,
     toAccountManageScreen: () -> Unit = {},
     toVersionManageScreen: () -> Unit = {},
     toVersionSettingsScreen: () -> Unit = {}
 ) {
-    val xOffset by swapAnimateDpAsState(
-        targetValue = swapTargetValue,
-        swapIn = isVisible,
-        isHorizontal = true
-    )
+    val ctx = rememberAnimatedContext(isVisible = isVisible)
 
     val account by AccountsManager.currentAccountFlow.collectAsStateWithLifecycle()
 
@@ -634,7 +656,7 @@ private fun ActionMenu(
         val scale = pickUpScale()
         scaleX = scale
         scaleY = scale
-    }.offset { IntOffset(x = xOffset.roundToPx(), y = 0) }
+    }.animated(ctx, from = swapDirection)
 
     if (isTaller) {
         ActionMenuTallerContent(

@@ -9,7 +9,7 @@
 
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,6 @@ import com.zalith.pcl.coroutine.buildPhase
 import com.zalith.pcl.game.version.export.platform.CurseForgePackExporter
 import com.zalith.pcl.game.version.export.platform.MCBBSPackExporter
 import com.zalith.pcl.game.version.export.platform.ModrinthPackExporter
-import com.zalith.pcl.game.version.export.platform.MultiMCPackExporter
 import com.zalith.pcl.game.version.installed.Version
 import com.zalith.pcl.path.PathManager
 import com.zalith.pcl.ui.androidText
@@ -70,7 +69,6 @@ class PackExporter(
         PackType.MCBBS -> MCBBSPackExporter()
         PackType.Modrinth -> ModrinthPackExporter()
         PackType.CurseForge -> CurseForgePackExporter()
-        PackType.MultiMC -> MultiMCPackExporter()
     }
 
     /**

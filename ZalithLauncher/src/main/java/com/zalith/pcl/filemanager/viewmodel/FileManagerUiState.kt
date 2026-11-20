@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@ import com.zalith.pcl.filemanager.logic.entry.FmListResult
 import com.zalith.pcl.filemanager.logic.ops.ConflictResolution
 import com.zalith.pcl.filemanager.logic.ops.DirStats
 import com.zalith.pcl.filemanager.logic.ops.PasteRequest
-import com.zalith.pcl.filemanager.logic.task.TaskProgress
 import com.zalith.pcl.filemanager.logic.task.TaskState
 import com.zalith.pcl.filemanager.logic.trash.TrashItem
 import com.zalith.pcl.ui.code_editor.EditorState
@@ -89,7 +88,6 @@ data class FileManagerUiState(
     val showHidden: Boolean = false,
     val trashSortConfig: TrashSortConfig = TrashSortConfig(),
     val taskState: TaskState = TaskState.Idle,
-    val taskProgress: TaskProgress? = null,
     val trashView: TrashViewState = TrashViewState.Idle,
     val snackbar: FmSnackbar? = null,
     val locateHighlightPath: Path? = null,

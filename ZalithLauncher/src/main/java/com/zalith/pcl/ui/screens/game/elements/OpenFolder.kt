@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -85,7 +85,7 @@ import com.zalith.pcl.ui.theme.itemColor
 import com.zalith.pcl.ui.theme.onItemColor
 import com.zalith.pcl.ui.theme.showThemed
 import com.zalith.pcl.utils.animation.getAnimateTween
-import com.zalith.pcl.utils.animation.getAnimateTweenJellyBounce
+import com.zalith.pcl.utils.animation.getEnterTween
 import com.zalith.pcl.utils.string.getMessageOrToString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -181,7 +181,7 @@ fun OpenFolderLayer(
             AnimatedVisibility(
                 visible = operation is OpenFolderOperation.OpenFolder,
                 enter = fadeIn() + slideInHorizontally(
-                    animationSpec = getAnimateTweenJellyBounce()
+                    animationSpec = getEnterTween()
                 ) {
                     if (isRtl) -40 else 40
                 },

@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,12 +31,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
-import androidx.navigation3.ui.NavDisplay
 import com.zalith.pcl.game.download.assets.downloadDependenciesForVersions
 import com.zalith.pcl.game.download.assets.downloadSingleForVersions
 import com.zalith.pcl.game.download.assets.platform.PlatformClasses
 import com.zalith.pcl.game.version.installed.VersionsManager
+import com.zalith.pcl.ui.screens.NestedNavDisplay
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.NormalNavKey
 import com.zalith.pcl.ui.screens.TitledNavKey
@@ -109,14 +108,14 @@ fun DownloadModScreen(
     )
 
     if (backStack.isNotEmpty()) {
-        NavDisplay(
+        NestedNavDisplay(
+            ownerKey = key,
             backStack = backStack,
             modifier = Modifier.fillMaxSize(),
             onBack = {
                 onBack(backStack)
             },
-            entryDecorators = listOf(
-                rememberSaveableStateHolderNavEntryDecorator(),
+            extraDecorators = listOf(
                 rememberViewModelStoreNavEntryDecorator()
             ),
             transitionSpec = rememberTransitionSpec(),

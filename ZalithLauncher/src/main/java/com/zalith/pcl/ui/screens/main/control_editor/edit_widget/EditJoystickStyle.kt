@@ -38,7 +38,7 @@ import com.zalith.pcl.ui.screens.main.control_editor.InfoLayoutItem
 import com.zalith.pcl.ui.screens.main.control_editor.InfoLayoutTextItem
 import com.zalith.pcl.ui.screens.main.control_editor.edit_joystick.JoystickStylePreview
 import com.zalith.pcl.ui.screens.main.control_editor.edit_joystick.resolveThemeConfig
-import com.zalith.pcl.utils.string.isNotEmptyOrBlank
+import com.zalith.pcl.ui.screens.main.control_editor.orUnspecified
 
 /**
  * 为摇杆控件选择外观
@@ -116,7 +116,7 @@ private fun ChoseStyleItem(
 
             MarqueeText(
                 modifier = Modifier.fillMaxWidth(),
-                text = style.name.takeIf { it.isNotEmptyOrBlank() } ?: stringResource(R.string.generic_unspecified),
+                text = style.name.orUnspecified(),
                 textAlign = TextAlign.Center
             )
 

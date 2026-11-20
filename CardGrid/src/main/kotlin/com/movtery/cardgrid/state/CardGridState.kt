@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -292,6 +292,20 @@ class CardGridState internal constructor(
         if (!materialized && wasReady && newGeometry.columns != oldColumns && cards.isNotEmpty()) {
             reflowTo(newColumns = newGeometry.columns, oldColumns = oldColumns)
         }
+    }
+
+    /**
+     * 卡片布局矩形在窗口坐标系中的位置
+     */
+    fun rootRectOf(card: GridCard): Rect {
+        val rect = rectFor(card.layout)
+        val offset = areaOffsetInRoot
+        return Rect(
+            left = rect.left + offset.x,
+            top = rect.top + offset.y,
+            right = rect.right + offset.x,
+            bottom = rect.bottom + offset.y
+        )
     }
 
     /** 卡片布局对应的渲染矩形（px），锚点为网格左上角 */

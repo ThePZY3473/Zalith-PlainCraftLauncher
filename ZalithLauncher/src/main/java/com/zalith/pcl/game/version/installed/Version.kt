@@ -9,7 +9,7 @@
 
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -94,6 +94,10 @@ class Version(
      * 启用控制代理
      */
     var enableTouchProxy: Boolean = false,
+    /**
+     * 是否检测到自实现 FPE 模拟的模组
+     */
+    var fpeEmulatorModDetected: Boolean = false,
 ): Parcelable {
     /**
      * 当前版本是否被置顶
@@ -225,6 +229,10 @@ class Version(
     fun getRenderer(): String = versionConfig.renderer
         .getValueOrDefault(AllSettings.renderer.getValue())
         .ifEmpty { Renderers.getDefaultRendererId() }
+
+    fun isSfpewPluginLayerEnabled(): Boolean = versionConfig.isSfpewPluginLayerEnabled()
+
+    fun isSfpewRelaxedContextEnabled(): Boolean = versionConfig.isSfpewRelaxedContextEnabled()
 
     fun getDriver(): String = versionConfig.driver.getValueOrDefault(AllSettings.vulkanDriver.getValue())
 

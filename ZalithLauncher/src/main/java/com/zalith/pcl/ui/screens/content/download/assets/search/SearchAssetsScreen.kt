@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@ package com.zalith.pcl.ui.screens.content.download.assets.search
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,7 +29,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,20 +44,21 @@ import com.zalith.pcl.game.download.assets.platform.navigatePage
 import com.zalith.pcl.game.download.assets.platform.nextPage
 import com.zalith.pcl.game.download.assets.platform.previousPage
 import com.zalith.pcl.game.download.assets.platform.searchAssets
-import com.zalith.pcl.game.download.assets.utils.ModTranslations
 import com.zalith.pcl.game.download.assets.utils.searchMcMods
 import com.zalith.pcl.game.version.mod.InstalledMod
 import com.zalith.pcl.game.versioninfo.MinecraftVersion
 import com.zalith.pcl.game.versioninfo.MinecraftVersions
 import com.zalith.pcl.game.versioninfo.popularVersions
 import com.zalith.pcl.ui.base.BaseScreen
+import com.zalith.pcl.ui.components.AnimatedDirection
+import com.zalith.pcl.ui.components.animated
+import com.zalith.pcl.ui.components.rememberAnimatedContext
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.TitledNavKey
 import com.zalith.pcl.ui.screens.content.download.assets.elements.AssetsPage
 import com.zalith.pcl.ui.screens.content.download.assets.elements.ResultListLayout
 import com.zalith.pcl.ui.screens.content.download.assets.elements.SearchAssetsState
 import com.zalith.pcl.ui.screens.content.download.assets.elements.SearchFilter
-import com.zalith.pcl.utils.animation.swapAnimateDpAsState
 import com.zalith.pcl.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +68,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jackhuang.hmcl.addon.AddonProjectInfo
 
 private const val TAG = "SearchAssetsScreen"
 
@@ -87,7 +87,7 @@ private class SearchScreenViewModel(
     var searchPlatform by mutableStateOf(initialPlatform)
     var searchFilter by mutableStateOf(PlatformSearchFilter())
 
-    private val _searchedMcMods = MutableStateFlow<List<ModTranslations.McMod>>(emptyList())
+    private val _searchedMcMods = MutableStateFlow<List<AddonProjectInfo>>(emptyList())
     /** 搜索得到的所有 MCMOD 项目 */
     val searchedMcMods = _searchedMcMods.asStateFlow()
     private val _searchedVersions = MutableStateFlow<List<String>>(emptyList())
@@ -296,12 +296,12 @@ fun SearchAssetsScreen(
         Triple(screenKey, currentKey, false)
     ) { isVisible ->
         Row {
-            val yOffset by swapAnimateDpAsState(targetValue = (-40).dp, swapIn = isVisible)
+            val resultCtx = rememberAnimatedContext(isVisible = isVisible)
             ResultListLayout(
                 modifier = Modifier
                     .fillMaxHeight()
                     .weight(7f)
-                    .offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
+                    .animated(resultCtx),
                 classes = platformClasses,
                 searchState = viewModel.searchResult,
                 onReload = {
@@ -356,18 +356,14 @@ fun SearchAssetsScreen(
                 }
             )
 
-            val xOffset by swapAnimateDpAsState(
-                targetValue = 40.dp,
-                swapIn = isVisible,
-                isHorizontal = true
-            )
+            val filterCtx = rememberAnimatedContext(isVisible = isVisible)
             val searchedMcMods by viewModel.searchedMcMods.collectAsStateWithLifecycle()
             val searchedVersions by viewModel.searchedVersions.collectAsStateWithLifecycle()
             SearchFilter(
                 modifier = Modifier
                     .fillMaxHeight()
                     .weight(3f)
-                    .offset { IntOffset(x = xOffset.roundToPx(), y = 0) },
+                    .animated(filterCtx, from = AnimatedDirection.Right),
                 contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp, end = 12.dp),
                 enablePlatform = enablePlatform,
                 searchPlatform = viewModel.searchPlatform,

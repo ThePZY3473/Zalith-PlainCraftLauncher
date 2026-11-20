@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -122,7 +122,14 @@ object VersionsManager {
                 Logger.debug(TAG, "Version list refreshed, refreshing the current version now.")
                 refreshCurrentVersion()
 
-                listeners.forEach { it() }
+                listeners.forEach { listener ->
+                    runCatching { listener() }.onFailure { e ->
+                        Logger.error(TAG, "A version refresh listener threw an exception.", e)
+                    }
+                }
+
+                //清理随已失效的旧版本对象创建的 ViewModelStore（仍被承载屏幕持有的会被跳过）
+                VersionViewModelStores.clearStale(newVersions)
 
                 _isRefreshing.update { false }
             }

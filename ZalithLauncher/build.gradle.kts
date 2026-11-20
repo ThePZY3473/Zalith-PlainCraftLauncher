@@ -320,6 +320,7 @@ dependencies {
     implementation(project(":Guide"))
     //Utils
     implementation(libs.bytehook)
+    implementation(libs.jetbrains.annotations)
     implementation(libs.gson)
     implementation(libs.commons.io)
     implementation(libs.commons.codec)

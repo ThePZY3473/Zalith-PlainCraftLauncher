@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,8 @@ import kotlin.time.Duration.Companion.milliseconds
 object DownloadEngine {
 
     /**
-     * @param sizeCallback 落盘字节的增量回调；引擎内部的重试与换源已被消化，调用方只会收到正值增量
+     * @param sizeCallback 落盘字节的带符号增量回调：失败重试丢弃的字节以负增量回滚，
+     * 全部增量的代数和等于最终落盘大小
      */
     suspend fun download(
         request: DownloadRequest,
@@ -69,7 +70,7 @@ object DownloadEngine {
     private fun drain(reported: AtomicLong, stats: DownloadStats, callback: (Long) -> Unit) {
         val total = stats.downloadedBytes
         val delta = total - reported.get()
-        if (delta > 0) {
+        if (delta != 0L) {
             reported.addAndGet(delta)
             callback(delta)
         }

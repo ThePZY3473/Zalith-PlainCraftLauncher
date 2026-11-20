@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,6 +62,7 @@ import com.zalith.pcl.setting.enums.FpsDisplayMode
 import com.zalith.pcl.setting.enums.GamepadInputMode
 import com.zalith.pcl.setting.enums.GestureActionType
 import com.zalith.pcl.setting.enums.MouseControlMode
+import com.zalith.pcl.setting.enums.MouseTouchBlockMode
 import com.zalith.pcl.setting.enums.ResolutionRule
 import com.zalith.pcl.setting.unit.floatRange
 import com.zalith.pcl.ui.AndroidStringText
@@ -358,6 +359,21 @@ private fun GameActionContent(
                 enabled = AllSettings.showMenuBall.state
             )
         }
+        //请求最高刷新率
+        item {
+            MenuSwitchButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = stringResource(R.string.settings_renderer_max_refresh_rate_title),
+                switch = AllSettings.requestMaxRefreshRate.state,
+                onSwitch = { AllSettings.requestMaxRefreshRate.save(it) },
+                color = color,
+                contentColor = contentColor,
+            )
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // 分辨率规则与游戏窗口分辨率
         item {
@@ -536,6 +552,17 @@ private fun ControlOverview(
                 contentColor = contentColor,
             )
         }
+        //输入时默认弹出放大镜
+        item {
+            MenuSwitchButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = stringResource(R.string.game_menu_option_ime_magnifier_auto_show),
+                switch = AllSettings.imeMagnifierAutoShow.state,
+                onSwitch = { AllSettings.imeMagnifierAutoShow.save(it) },
+                color = color,
+                contentColor = contentColor,
+            )
+        }
 
         item {
             Spacer(modifier = Modifier.height(8.dp))
@@ -642,6 +669,19 @@ private fun ControlMouse(
                 items = MouseControlMode.entries,
                 currentItem = AllSettings.mouseControlMode.state,
                 onItemChange = { AllSettings.mouseControlMode.save(it) },
+                getItemText = { stringResource(it.nameRes) },
+                color = color,
+                contentColor = contentColor,
+            )
+        }
+        //阻止触摸虚拟鼠标输入
+        item {
+            MenuListLayout(
+                modifier = Modifier.fillMaxWidth(),
+                title = stringResource(R.string.settings_control_mouse_block_touch_title),
+                items = MouseTouchBlockMode.entries,
+                currentItem = AllSettings.mouseTouchBlockMode.state,
+                onItemChange = { AllSettings.mouseTouchBlockMode.save(it) },
                 getItemText = { stringResource(it.nameRes) },
                 color = color,
                 contentColor = contentColor,

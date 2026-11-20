@@ -1,6 +1,6 @@
 /*
  * Zalith Launcher 2
- * Copyright (C) 2025 MovTery <movtery228@qq.com> and contributors
+ * Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,8 +42,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
-import androidx.navigation3.ui.NavDisplay
 import com.google.gson.JsonSyntaxException
 import com.zalith.pcl.R
 import com.zalith.pcl.game.download.game.GameDownloadInfo
@@ -60,6 +58,7 @@ import com.zalith.pcl.ui.components.NotificationCheck
 import com.zalith.pcl.ui.components.SimpleAlertDialog
 import com.zalith.pcl.ui.components.fadeEdge
 import com.zalith.pcl.ui.components.verticalScrollWithBar
+import com.zalith.pcl.ui.screens.NestedNavDisplay
 import com.zalith.pcl.ui.screens.NestedNavKey
 import com.zalith.pcl.ui.screens.NormalNavKey
 import com.zalith.pcl.ui.screens.TitledNavKey
@@ -97,7 +96,7 @@ private sealed interface GameInstallOperation {
     data object Success : GameInstallOperation
 }
 
-private class GameDownloadViewModel(): ViewModel() {
+private class GameDownloadViewModel: ViewModel() {
     /**
      * 用于刷新游戏下载页面版本名称的检查
      */
@@ -215,14 +214,14 @@ fun DownloadGameScreen(
     )
 
     if (backStack.isNotEmpty()) {
-        NavDisplay(
+        NestedNavDisplay(
+            ownerKey = key,
             backStack = backStack,
             modifier = Modifier.fillMaxSize(),
             onBack = {
                 onBack(backStack)
             },
-            entryDecorators = listOf(
-                rememberSaveableStateHolderNavEntryDecorator(),
+            extraDecorators = listOf(
                 rememberViewModelStoreNavEntryDecorator()
             ),
             transitionSpec = rememberTransitionSpec(),
@@ -236,9 +235,12 @@ fun DownloadGameScreen(
                             downloadGameScreenKey = downloadGameScreenKey
                         ),
                         eventViewModel = eventViewModel,
-                    ) { versionString ->
+                    ) { version ->
                         backStack.navigateTo(
-                            NormalNavKey.DownloadGame.Addons(versionString)
+                            NormalNavKey.DownloadGame.Addons(
+                                gameVersion = version.version.id,
+                                type = version.type,
+                            )
                         )
                     }
                 }
