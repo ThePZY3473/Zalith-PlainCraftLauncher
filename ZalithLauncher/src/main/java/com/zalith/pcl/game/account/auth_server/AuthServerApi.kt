@@ -166,7 +166,11 @@ class AuthServerApi(private var baseUrl: String) {
                         )
                     )
                 }
-                response.status.isSuccess()
+                when {
+                    response.status.isSuccess() -> true
+                    response.status == HttpStatusCode.Forbidden -> false
+                    else -> throw ResponseException(response.getErrorMessage(), response.status.value)
+                }
             } catch (e: ClientRequestException) {
                 if (e.response.status.value == 403) false
                 else throw ResponseException(e.response.getErrorMessage(), e.response.status.value)

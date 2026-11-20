@@ -33,6 +33,17 @@ import java.util.Objects
 
 private const val TAG = "AuthServerHelper"
 
+/** Only a rejected session may trigger one recovery; never retry the recovery itself. */
+internal suspend fun <T> recoverAuthSessionOnce(
+    request: suspend () -> T,
+    recover: suspend () -> T,
+): T = try {
+    request()
+} catch (e: ResponseException) {
+    if (e.statusCode != 403) throw e
+    recover()
+}
+
 /**
  * 帮助登录外置账号（创建新的外置账号、仅登录当前外置账号）
  */
@@ -117,32 +128,45 @@ class AuthServerHelper(
         if (apiServer.validate(context, account)) return true
 
         return try {
-            val authResult = apiServer.refreshToken(context, account, select = true)
+            // 已绑定的令牌只刷新，不再次提交 selectedProfile。
+            val authResult = apiServer.refreshToken(context, account, select = false)
+            verifySelectedRole(context, authResult, account.profileId)
             account.accessToken = authResult.accessToken
+            account.clientToken = authResult.clientToken
             true
         } catch (e: ResponseException) {
             if (e.statusCode == 403) false else throw e
         }
     }
 
-    /**
-     * 使用账号密码重新登录并匹配当前角色，仅在 validate 与 refresh 均被拒绝时调用
-     */
-    suspend fun passwordLogin(context: Context, account: Account) {
-        val authResult = apiServer.authenticate(context, account.otherAccount!!, password)
-        val selected = authResult.selectedProfile
-        val matchedName: String
-        val matchedId: String
-        if (selected != null && selected.id == account.profileId) {
-            matchedId = selected.id
-            matchedName = selected.name
-        } else {
-            val profile = authResult.availableProfiles?.find { it.id == account.profileId }
-                ?: throw ResponseException(context.getString(R.string.account_other_login_role_not_found))
-            matchedId = profile.id
-            matchedName = profile.name
+    private fun verifySelectedRole(context: Context, result: AuthResult, profileId: String) {
+        val selected = result.selectedProfile ?: return
+        if (selected.id != profileId) {
+            throw ResponseException(context.getString(R.string.account_other_login_role_not_found))
         }
-        updateAccountInfo(account, authResult, matchedName, matchedId)
+    }
+
+    /** 只恢复原角色：多角色账号重新登录后，必须先绑定，再使用新令牌。 */
+    suspend fun passwordLogin(context: Context, account: Account) {
+        val fresh = apiServer.authenticate(context, email, password)
+        verifySelectedRole(context, fresh, account.profileId)
+        val result = if (fresh.selectedProfile != null) {
+            fresh
+        } else {
+            val profile = fresh.availableProfiles?.firstOrNull { it.id == account.profileId }
+                ?: throw ResponseException(context.getString(R.string.account_other_login_role_not_found))
+            val candidate = account.copy(
+                username = profile.name,
+                accessToken = fresh.accessToken,
+                clientToken = fresh.clientToken
+            )
+            apiServer.refreshToken(context, candidate, select = true)
+        }
+        val selected = result.selectedProfile
+        if (selected == null || selected.id != account.profileId) {
+            throw ResponseException(context.getString(R.string.account_other_login_role_not_found))
+        }
+        updateAccountInfo(account, result, selected.name, selected.id)
     }
 
     /**
@@ -164,16 +188,16 @@ class AuthServerHelper(
             context,
             onlyOneRole = { authResult, task ->
                 val profileId = authResult.selectedProfile!!.id
-                val account: Account = loadFromProfileID(profileId)
+                val account = loadFromProfileID(profileId).copy()
                 updateAccountInfo(account, authResult, authResult.selectedProfile!!.name, profileId)
                 onSuccess(account, task)
             },
             hasMultipleRoles = { authResult, _ ->
                 selectRole(authResult.availableProfiles!!) { selectedProfile ->
                     val profileId = selectedProfile.id
-                    val account: Account = loadFromProfileID(profileId)
+                    val account = loadFromProfileID(profileId).copy()
                     updateAccountInfo(account, authResult, selectedProfile.name, profileId)
-                    refresh(context, account)
+                    bindSelectedRole(context, account)
                 }
             }
         )
@@ -216,16 +240,22 @@ class AuthServerHelper(
         )
     }
 
-    private fun refresh(context: Context, account: Account) {
+    private fun bindSelectedRole(context: Context, account: Account) {
         val task = Task.runTask(
             task = { task ->
-                apiServer.refresh(context, account, true,
-                    onSuccess = { authResult ->
-                        account.accessToken = authResult.accessToken
-                        onSuccess(account, task)
+                recoverAuthSessionOnce(
+                    request = {
+                        val result = apiServer.refreshToken(context, account, select = true)
+                        val selected = result.selectedProfile
+                        if (selected == null || selected.id != account.profileId) {
+                            throw ResponseException(context.getString(R.string.account_other_login_role_not_found))
+                        }
+                        updateAccountInfo(account, result, selected.name, selected.id)
                     },
-                    onFailed = onFailed
+                    // 登录过程中签发的令牌如果被拒绝，只重新认证一次，且仍绑定同一角色。
+                    recover = { passwordLogin(context, account) },
                 )
+                onSuccess(account, task)
             },
             onError = { e ->
                 Logger.error(TAG, "An exception was encountered while performing the refresh task.", e)

@@ -203,7 +203,8 @@ object AccountsManager {
         account.isNoLoginRequired() -> false
         account.isMicrosoftAccount() -> !isSessionValidated(account) ||
                 System.currentTimeMillis() > account.expiresAt - 5 * 60 * 1000
-        else -> !isSessionValidated(account)
+        // 外置令牌可能在切换角色后被认证服务器撤销，不能沿用本次会话的旧校验结果。
+        else -> true
     }
 
     /**

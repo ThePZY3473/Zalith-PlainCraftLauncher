@@ -7,7 +7,7 @@
 [Plain Craft Launcher 2](https://github.com/Hex-Dragon/PCL2)（下称 PCL2）的版式与交互重做，
 使用 **Jetpack Compose** 编写。
 
-> 当前版本：**1.5.4（versionCode 200086）**，基于上游 Zalith Launcher 2 **2.8.1**
+> 当前版本：**1.5.4（versionCode 200087）**，基于上游 Zalith Launcher 2 **2.8.1**
 > 本项目是 Zalith Launcher 2 的**非官方修改版**，与上游官方无关联。
 > 依 GPLv3 第 7 条附加条款，名称中不含上游原名 `ZalithLauncher` 及其缩写 `ZL`，
 > 并在启动页与关于页标注「非官方修改版」。
