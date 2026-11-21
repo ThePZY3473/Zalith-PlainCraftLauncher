@@ -254,6 +254,11 @@ class GameLauncher(
                 }
             }
         }
+
+        // Cleanroom 直接用 SDL3 初始化视频子系统，但不经过 SDL_main 包装，
+        // 不补这一步 SDL 会拒绝初始化（Application didn't initialize properly）。
+        ZLBridge.dlopen("${PathManager.DIR_NATIVE_LIB}/libSDL3.so")
+        ZLBridge.sdlSetMainReady()
     }
 
     override fun progressFinalUserArgs(args: MutableList<String>, ramAllocation: Int) {

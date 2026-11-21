@@ -130,6 +130,25 @@ JNIEXPORT jboolean JNICALL Java_com_zalith_pcl_bridge_ZLBridge_dlopen(JNIEnv *en
 	return handle != NULL;
 }
 
+JNIEXPORT void JNICALL Java_com_zalith_pcl_bridge_ZLBridge_sdlSetMainReady(JNIEnv *env, jclass clazz) {
+	// SDL3 只在 SDL_InitSubSystem(SDL_INIT_VIDEO) 时检查 SDL_MainIsReady。
+	// Cleanroom 的入口不经过 SDL_main 包装，所以这里补一次 SDL_SetMainReady()，
+	// 否则会得到 "Application didn't initialize properly..."。
+	void *handle = dlopen("libSDL3.so", RTLD_LAZY | RTLD_LOCAL);
+	if (handle == NULL) {
+		__android_log_print(ANDROID_LOG_WARN, "ZLBridge",
+		                    "SDL: libSDL3.so not loadable: %s", dlerror());
+		return;
+	}
+	void (*set_main_ready)(void) = (void (*)(void)) dlsym(handle, "SDL_SetMainReady");
+	if (set_main_ready == NULL) {
+		__android_log_print(ANDROID_LOG_WARN, "ZLBridge", "SDL: SDL_SetMainReady not found");
+		return;
+	}
+	set_main_ready();
+	LOG_TO_D("SDL: SDL_SetMainReady called");
+}
+
 JNIEXPORT jlong JNICALL Java_com_zalith_pcl_bridge_ZLBridge_getJavaVMPointer(JNIEnv *env, jclass clazz) {
 	if (pojav_environ->dalvikJavaVMPtr == NULL) return 0;
 	return (jlong) (intptr_t) pojav_environ->dalvikJavaVMPtr;

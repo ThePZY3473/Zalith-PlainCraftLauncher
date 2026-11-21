@@ -69,6 +69,16 @@ public final class ZLBridge {
     /** 上一次 dlopen 的结果/失败原因（诊断用）。 */
     @Keep public static native String getLastDlopenError();
 
+    /**
+     * 让 SDL3 认为 main 已就绪。
+     *
+     * Cleanroom 通过 LWJGL 直接调用 SDL_InitSubSystem(SDL_INIT_VIDEO)，但它的入口
+     * 不经过 SDL_main 包装，SDL 会报
+     * "Application didn't initialize properly, did you include SDL_main.h..."。
+     * 这里补调 SDL_SetMainReady()。
+     */
+    @Keep public static native void sdlSetMainReady();
+
     //Render
     @Keep public static native void setupBridgeWindow(Object surface);
     @Keep public static native void releaseBridgeWindow();
