@@ -101,7 +101,17 @@ object SegmentedDownloader {
     const val MIN_TOTAL_SIZE = 8L * 1024 * 1024
 
     /** 单段最小长度：段太小（比如 200KB 切 8 段）每条连接都在慢启动，反而更慢 */
-    private const val MIN_SEGMENT_SIZE = 2L * 1024 * 1024
+    const val MIN_SEGMENT_SIZE_FOR_CALLER = 2L * 1024 * 1024
+
+    private const val MIN_SEGMENT_SIZE = MIN_SEGMENT_SIZE_FOR_CALLER
+
+    /**
+     * 收尾阶段的放宽值：待下文件只剩几个时，连接数已经塌了，
+     * 这时连 2~4 MB 的小文件也值得切几段 —— 5 个文件 × 1 条连接只有三百来 KB/s。
+     */
+    const val TAIL_MIN_TOTAL_SIZE = 1L * 1024 * 1024
+    const val TAIL_MIN_SEGMENT_SIZE = 512L * 1024
+    const val TAIL_MAX_PARALLEL_FILES = 6
 
     /**
      * 单个文件最多几条连接。
@@ -131,7 +141,9 @@ object SegmentedDownloader {
      * 表现出来是「下载变快了一下，然后整个应用卡住」。配额用满时**立刻返回 false
      * 让这个文件走单连接**，绝不排队等待 —— 排队会让一批文件互相等，比慢一点糟糕得多。
      */
-    private const val MAX_PARALLEL_FILES = 3
+    const val MAX_PARALLEL_FILES_FOR_CALLER = 3
+
+    private const val MAX_PARALLEL_FILES = MAX_PARALLEL_FILES_FOR_CALLER
 
     private val activeSegmentedFiles = AtomicInteger(0)
 
@@ -183,10 +195,12 @@ object SegmentedDownloader {
         onBytes: (Long) -> Unit,
         maxSegments: Int = MAX_SEGMENTS,
         minSegmentSize: Long = MIN_SEGMENT_SIZE,
+        minTotalSize: Long = MIN_TOTAL_SIZE,
+        maxParallelFiles: Int = MAX_PARALLEL_FILES,
     ): Boolean {
         if (expectedSize in 1 until minSegmentSize) return false
 
-        if (activeSegmentedFiles.incrementAndGet() > MAX_PARALLEL_FILES) {
+        if (activeSegmentedFiles.incrementAndGet() > maxParallelFiles) {
             activeSegmentedFiles.decrementAndGet()
             return false
         }
@@ -205,6 +219,7 @@ object SegmentedDownloader {
                     sha1 = sha1,
                     maxSegments = maxSegments,
                     minSegmentSize = minSegmentSize,
+                    minTotalSize = minTotalSize,
                 ) { delta ->
                     reported += delta
                     onBytes(delta)
@@ -408,10 +423,11 @@ object SegmentedDownloader {
         sha1: String?,
         maxSegments: Int,
         minSegmentSize: Long,
+        minTotalSize: Long,
         report: (Long) -> Unit,
     ): Boolean {
         val total = sources.first().total
-        if (total < MIN_TOTAL_SIZE) return false
+        if (total < minTotalSize) return false
 
         val parent = targetFile.absoluteFile.parentFile ?: return false
         if (!parent.exists() && !parent.mkdirs()) return false

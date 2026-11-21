@@ -72,6 +72,9 @@ class BatchDownloader(
 
     private val files = Semaphore(maxConnections)
 
+    /** 还没下完的文件数：收尾阶段用它判断要不要给单个文件多开几条连接 */
+    private val pendingFiles = AtomicInteger(0)
+
     /** 连续永久失败计数，任何文件成功即清零；与零成功条件共同判定系统性故障 */
     private val systemicFailureCount = AtomicInteger(0)
 
@@ -89,6 +92,7 @@ class BatchDownloader(
         // 不做任何清零
         // 调用方可能在 run() 之前已把本地复用文件登记进 stats
         requests.forEach { stats.registerFile(it.expectedSize) }
+        pendingFiles.set(requests.size)
         systemicFailureCount.set(0)
         systemicAbortCause.set(null)
 
@@ -167,10 +171,24 @@ class BatchDownloader(
         request: DownloadRequest,
         failures: MutableMap<String, Throwable>
     ) {
+        try {
+            runOneInner(request, failures)
+        } finally {
+            pendingFiles.decrementAndGet()
+        }
+    }
+
+    private suspend fun runOneInner(
+        request: DownloadRequest,
+        failures: MutableMap<String, Throwable>
+    ) {
         var lastError: Throwable? = null
         repeat(retryRounds + 1) {
             try {
-                FileDownloader(request, stats).download()
+                FileDownloader(request, stats) {
+                    // 只剩几个文件时，单文件多开几段，避免并发从 32 塌到 5
+                    pendingFiles.get() <= TAIL_FILE_THRESHOLD
+                }.download()
                 onFileSuccess?.invoke(request)
                 stats.markFileFinished()
                 systemicFailureCount.set(0)
@@ -203,6 +221,9 @@ class BatchDownloader(
     }
 
     companion object {
+        /** 待下文件少于这个数就进入「收尾阶段」，允许小文件也分段 */
+        private const val TAIL_FILE_THRESHOLD = 8
+
         private const val TAG = "BatchDownloader"
         const val DEFAULT_MAX_CONNECTIONS = 64
         const val PROGRESS_INTERVAL_MS = 100L
