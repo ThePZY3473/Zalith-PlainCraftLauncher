@@ -1,0 +1,29 @@
+/*
+ * locale_shim 的符号版本脚本。
+ *
+ * 预编译库（如 libng_gl4es.so）对 Android 8.0 才加入 bionic 的符号是按版本
+ * 引用的，例如 `nl_langinfo@LIBC_O`。它和 libc.so 一样是带版本定义的引用；
+ * 如果 shim 导出的符号没有对应版本，Android 7 的 linker 会认为版本不匹配，
+ * dlopen 仍然报 "cannot locate symbol nl_langinfo"。
+ *
+ * 这里按 bionic 的定义补齐版本：
+ *  - nl_langinfo / nl_langinfo_l：bionic 的默认版本是 LIBC，旧版本名 LIBC_O，
+ *    预编译库引用的是 LIBC_O；
+ *  - 其余 API 26/28 符号：默认版本 LIBC。
+ */
+LIBC_O {
+  global:
+    nl_langinfo;
+};
+
+LIBC {
+  global:
+    nl_langinfo_l;
+    newlocale;
+    duplocale;
+    freelocale;
+    uselocale;
+    pthread_setname_np;
+    pthread_getname_np;
+    memfd_create;
+};
