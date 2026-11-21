@@ -648,6 +648,15 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         vmViewModel.onConfigurationChanged()
+        // 旋转/折叠屏展开后，Surface 未必立刻按新尺寸重建，画面就会保持旧的长宽比
+        // （表现是整幅渲染转了 90°）。这里按当前屏幕尺寸主动刷一次，50ms 去抖在
+        // requestRefreshWindowSize 内部，连续旋转不会打爆。
+        if (vmViewModel.isRunning) {
+            val metrics = resources.displayMetrics
+            val long = maxOf(metrics.widthPixels, metrics.heightPixels)
+            val short = minOf(metrics.widthPixels, metrics.heightPixels)
+            requestRefreshWindowSize(IntSize(long, short))
+        }
     }
 
     /**
