@@ -148,7 +148,7 @@ class Pcl2Activity : BaseAppCompatActivity() {
             // 用户要的是「我管你刘海屏什么的全部强制全屏」，所以三档全不要。
             // 首次启动先过条款页：必须滚到末尾、停留满 10 秒才能点「同意」。
             // 同意结果写进 MMKV，之后不再出现；条款内容改版时把 TERMS_VERSION 加一即可重新弹。
-            var termsAccepted by remember { mutableStateOf(pclTermsAccepted()) }
+            var termsAccepted by remember { mutableStateOf(pclTermsAccepted(this@Pcl2Activity)) }
             if (termsAccepted) {
                 PclMainScreen(modifier = Modifier.fillMaxSize())
             } else {

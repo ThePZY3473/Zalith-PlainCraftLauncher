@@ -710,6 +710,37 @@ class GameInstaller(
         ).forEach { phased ->
             addTask(title = phased.title, icon = null, task = phased.task)
         }
+
+        // 原版 Json 是后面合并版本信息的唯一依据：它没落盘时，合并阶段只会抛
+        // 「Minecraft 版本 Json 缺失」，用户看到的是安装到一半失败。
+        // 这里在下载任务之后补一道校验，缺了就当场重下一次，把失败点提前到这一步。
+        addTask(
+            title = androidText(R.string.download_game_install_base_download_file2, info.gameVersion),
+            icon = null,
+            task = Task.runTask(
+                id = "Download.Vanilla.JsonVerify",
+                dispatcher = Dispatchers.IO,
+                task = { task ->
+                    task.updateProgress(-1f)
+                    val json = File(File(tempVersionsDir, info.gameVersion), "${info.gameVersion}.json")
+                    if (json.isFile && json.length() > 0L) return@runTask
+                    Logger.warning(
+                        TAG,
+                        "Vanilla version json missing after download, retrying: ${json.absolutePath}"
+                    )
+                    val version = downloader.findVersion(info.gameVersion)
+                        ?: throw IllegalStateException("版本清单中找不到 ${info.gameVersion}")
+                    downloader.createVersionJson(
+                        version = version,
+                        targetVersion = info.gameVersion,
+                        mcFolder = tempVersionsDir
+                    )
+                    if (!json.isFile || json.length() <= 0L) {
+                        throw IllegalStateException("原版版本 Json 下载失败：${json.absolutePath}")
+                    }
+                }
+            )
+        )
     }
 
     /**

@@ -28,6 +28,7 @@
 package com.zalith.pcl.ui.activities
 
 import androidx.compose.runtime.remember
+import com.zalith.pcl.legal.AgreementStore
 import com.zalith.pcl.legal.AvailableAgreement
 import kotlinx.coroutines.flow.MutableStateFlow
 import android.annotation.SuppressLint
@@ -170,6 +171,10 @@ class SplashActivity : BaseAppCompatActivity() {
         val prefs = getSharedPreferences("pcl2.mobileglues", MODE_PRIVATE)
         askMobileGlues = !isMobileGluesInstalled() && !prefs.getBoolean(KEY_MG_DECLINED, false)
 
+        // 协议：只有没同意过、或 data.json 的 version 变了才需要重新确认
+        val pendingAgreement = AgreementStore.pending(this)
+        val agreementFlow = MutableStateFlow(pendingAgreement)
+
         setContent {
             ZalithLauncherTheme {
                 Surface(
@@ -179,11 +184,14 @@ class SplashActivity : BaseAppCompatActivity() {
                 ) {
                     SplashScreen(
                         startAllTask = { startAllTask() },
-                        // 上游 2.8 把「欢迎页 / 用户协议」的判断挪进了 SplashScreen，
-                        // 这两个参数由它自己驱动：欢迎页结束就直接开始解压；
-                        // 协议本身由条款页处理，这里给个空流即可。
-                        onWelcomeFinished = { startAllTask() },
-                        availableAgreement = remember { MutableStateFlow<AvailableAgreement?>(null) },
+                        // 欢迎页的协议由它自己驱动：清单来自 assets/legal/data.json，
+                        // 「已同意版本」记在 AgreementStore；版本变了会重新弹。
+                        onWelcomeFinished = {
+                            // 走到这里说明用户已经勾选并通过了协议门槛，记下这一版
+                            pendingAgreement?.let { AgreementStore.markAccepted(this@SplashActivity, it.version) }
+                            startAllTask()
+                        },
+                        availableAgreement = agreementFlow,
                         unpackItems = unpackItems,
                         screenViewModel = backStackViewModel,
                     )

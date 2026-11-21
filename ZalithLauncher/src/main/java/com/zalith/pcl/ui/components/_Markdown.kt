@@ -55,7 +55,33 @@ fun MarkdownView(
         modifier = modifier,
         style = richTextStyle
     ) {
-        Markdown(content = content)
+        Markdown(content = softWrapMarkdownUrls(content))
+    }
+}
+
+/**
+ * 给 Markdown 里的裸链接插入零宽空格，让它能在任意位置折行。
+ *
+ * Compose 不会在「一个词」内部折行：一串 URL 会被当成超长 token，直接顶出容器。
+ * 首次启动的协议弹窗只有 90% 屏宽，GitHub 链接必然溢出 —— 看上去就是「一整条连在一起」。
+ * 零宽空格不占宽度，复制出来也不影响阅读。
+ *
+ * `[文字](https://…)` 这种链接**目标**里不插，否则点开就是坏地址。
+ */
+private val BARE_URL_PATTERN =
+    Regex("https?://[^\\s<>\"'`\u3000-\u303F\uFF00-\uFFEF]+")
+
+private fun softWrapMarkdownUrls(content: String): String {
+    if (!content.contains("http")) return content
+    return BARE_URL_PATTERN.replace(content) { match ->
+        val start = match.range.first
+        val isLinkTarget = start >= 2 && content[start - 1] == '(' && content[start - 2] == ']'
+        val value = match.value
+        when {
+            isLinkTarget -> value
+            value.length <= 24 -> value
+            else -> value.chunked(24).joinToString("\u200B")
+        }
     }
 }
 
