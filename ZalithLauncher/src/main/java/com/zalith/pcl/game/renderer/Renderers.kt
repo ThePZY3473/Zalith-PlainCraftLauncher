@@ -30,6 +30,7 @@ package com.zalith.pcl.game.renderer
 import com.zalith.pcl.game.renderer.renderers.FreedrenoRenderer
 import com.zalith.pcl.game.renderer.renderers.GL4ESRenderer
 import com.zalith.pcl.game.renderer.renderers.KopperZinkRenderer
+import com.zalith.pcl.game.renderer.renderers.MobileGLRenderer
 import com.zalith.pcl.game.renderer.renderers.MobileGluesRenderer
 import com.zalith.pcl.game.renderer.renderers.NGGL4ESRenderer
 import com.zalith.pcl.game.renderer.renderers.PanfrostRenderer
@@ -62,6 +63,7 @@ object Renderers {
             GL4ESRenderer,
             KopperZinkRenderer,
             MobileGluesRenderer,
+            MobileGLRenderer,
             VirGLRenderer,
             FreedrenoRenderer,
             PanfrostRenderer

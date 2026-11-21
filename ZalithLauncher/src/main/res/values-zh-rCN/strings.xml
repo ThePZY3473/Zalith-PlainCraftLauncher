@@ -1605,4 +1605,14 @@
     <string name="import_anything">导入到启动器</string>
     <string name="about_launcher_description_text">基于 Zalith Launcher 2 二次开发、界面按 PCL2 风格重做的 Android 版 Minecraft Java 启动器。</string>
     <string name="game_renderer_auto_compat">检测到 %1$s 需要桌面 OpenGL 3.3+，当前渲染器无法支撑，已自动改用 %2$s 启动本次游戏。</string>
+    <string name="renderer_mobilegl_backend_title">图形后端</string>
+    <string name="renderer_mobilegl_backend_desc">Espryt 翻译到 OpenGL ES，Magma 翻译到 Vulkan。建议先用 Espryt，出现画面异常再换 Magma。</string>
+    <string name="renderer_mobilegl_backend_gles">Espryt（OpenGL ES）</string>
+    <string name="renderer_mobilegl_backend_gles_desc">兼容性最好，绝大多数 Adreno / Mali 驱动都能用。</string>
+    <string name="renderer_mobilegl_backend_vulkan">Magma（Vulkan）</string>
+    <string name="renderer_mobilegl_backend_vulkan_desc">走 Vulkan，开销更低；需要设备有可用的 Vulkan 驱动。</string>
+    <string name="renderer_mobilegl_timerquery_title">禁用计时查询</string>
+    <string name="renderer_mobilegl_timerquery_desc">关闭 GPU 计时查询，避免部分驱动在查询耗时的时候卡住。</string>
+    <string name="renderer_mobilegl_relaxed_title">宽松语义</string>
+    <string name="renderer_mobilegl_relaxed_desc">跳过部分严格的 GL 状态校验。能救一些写法不规范的 Mod，但也可能掩盖真正的错误。</string>
 </resources>
