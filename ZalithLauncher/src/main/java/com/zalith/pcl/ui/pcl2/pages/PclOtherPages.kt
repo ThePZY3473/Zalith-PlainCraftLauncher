@@ -360,7 +360,7 @@ fun PclOtherAboutPage() {
                 PclAboutRow(
                     icon = painterResource(R.drawable.img_launcher_pcl2),
                     title = "Plain Craft Launcher 2",
-                    info = "本启动器界面的移植原型：版式、配色与文案均取自 PCL2",
+                    info = "界面版式参考 · GPLv3 · 未使用其源代码",
                     buttonText = "开源代码",
                 ) { openLink(context, URL_PCL2) }
             }

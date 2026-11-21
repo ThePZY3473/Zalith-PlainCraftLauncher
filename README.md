@@ -13,8 +13,27 @@ ZPCL Launcher 是面向 Android 设备的 Minecraft: Java Edition 启动器。
 
 ---
 
+## 下载
+
+安装包发布在 [GitHub Releases](https://github.com/zuanxu53-hub/ZPCL-Launcher/releases)，
+官网 <https://zpcl.fun> 提供同一批文件的镜像下载。
+
+| 附件 | 架构 | 适用设备 |
+|---|---|---|
+| `z-pcl-<版本>-release-arm64.apk` | arm64-v8a | 绝大多数 Android 手机与平板 |
+| `z-pcl-<版本>-release-armv7.apk` | armeabi-v7a | 32 位 ARM 老设备 |
+| `z-pcl-<版本>-release-x86_64.apk` | x86_64 | 64 位 x86 模拟器 |
+| `z-pcl-<版本>-release-x86.apk` | x86 | 32 位 x86 模拟器 |
+| `z-pcl-<版本>-release-all.apk` | 四合一 | 无法确定架构时使用 |
+
+包名为 `com.zpcl.launcher`，使用同一签名构建，可直接覆盖安装。
+从更早的包名（`com.zalith.pcl`）升级时需先卸载旧版；实例与存档位于共享存储，不受影响。
+
+---
+
 ## 目录
 
+- [下载](#下载)
 - [功能](#功能)
 - [两条产线](#两条产线)
 - [构建](#构建)
@@ -195,3 +214,5 @@ export JAVA_HOME=/path/to/jdk17
 感谢 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2)、
 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)、
 [PCL2](https://github.com/Hex-Dragon/PCL2) 以及所有上游依赖的作者。
+
+界面按 PCL2 的版式与交互重新实现，未使用 PCL2 的源代码；PCL2 以 GNU GPLv3 发布，仓库地址 <https://github.com/Hex-Dragon/PCL2>。

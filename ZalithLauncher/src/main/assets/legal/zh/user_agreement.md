@@ -36,7 +36,7 @@ https://github.com/zuanxu53-hub/ZPCL-Launcher
 ZPCL Launcher 是 Zalith Launcher 2 的非官方修改版，与上游作者无隶属关系，亦未获其背书。本协议改编自上游项目的同名协议（https://github.com/ZalithLauncher/ZalithLauncher2），仅在项目主体、分发渠道与联系方式上按本项目的实际情况调整。上游依 GPLv3 第 7 条附加的名称与标注要求继续适用：本修改版不以上游名称或其缩写作为自身标识，并在启动界面标注为非官方修改版。
 
 第三方库、运行环境、图形组件及其他内置软件同时受其各自许可证约束。
-本程序的界面版式参考 Plain Craft Launcher 2（PCL2），其代码以 GNU GPLv3 发布；本程序不含 PCL2 的源代码，仅参考其界面布局与交互。PCL2 的名称、图标及相关标识归其作者所有，本程序与 PCL2 作者无隶属关系，亦未获其背书。
+本程序的界面版式参考 Plain Craft Launcher 2（下称 PCL2，https://github.com/Hex-Dragon/PCL2）。PCL2 以 GNU GPLv3 发布；本程序未使用 PCL2 的源代码，界面为按该版式重新实现，仅参考其布局与交互逻辑。PCL2 的名称、图标及相关标识归其作者所有，本程序与 PCL2 作者无隶属关系，亦未获其背书。
 
 
 ## 四、账户与认证

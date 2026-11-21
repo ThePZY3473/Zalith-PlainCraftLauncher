@@ -36,7 +36,7 @@ https://github.com/zuanxu53-hub/ZPCL-Launcher
 ZPCL Launcher is an unofficial modified build of Zalith Launcher 2 (https://github.com/ZalithLauncher/ZalithLauncher2) and is not affiliated with or endorsed by the upstream author. This Agreement is adapted from the upstream agreement of the same name; only the project identity, distribution channels, and contact details are adjusted. The upstream additional terms under GPLv3 section 7 continue to apply: this build does not use the upstream name or its abbreviation as its own identifier, and it is labelled as an unofficial modified build on the launcher screens.
 
 Third-party libraries, runtimes, graphics components, and other bundled software are governed by their respective licenses as well as this Agreement where applicable.
-The interface layout of this program is modelled on Plain Craft Launcher 2 (PCL2), whose code is released under GNU GPLv3. This program contains no PCL2 source code and only follows its layout and interactions. The PCL2 name, icons, and related marks belong to its author; this program is not affiliated with or endorsed by the PCL2 author.
+The interface layout of this program is modelled on Plain Craft Launcher 2 (PCL2, https://github.com/Hex-Dragon/PCL2), which is released under GNU GPLv3. This program uses no PCL2 source code; the interface is reimplemented from that layout, following only its structure and interaction logic. The PCL2 name, icons, and related marks belong to its author; this program is not affiliated with or endorsed by the PCL2 author.
 
 
 ## 4. Accounts and Authentication
