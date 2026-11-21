@@ -36,7 +36,9 @@ fun GameManifest.isOldVersion(): Boolean = !minecraftArguments.isNullOrEmpty()
  */
 fun String?.getJsonOrNull(tag: String): JsonObject? {
     return this?.let { path ->
-        val text: String = File(path).takeIf { it.exists() && it.isFile }?.readText() ?: run {
+        // 个别镜像的响应会带 BOM，先去掉再判断，否则会被当成「不是 Json」
+        val text: String = File(path).takeIf { it.exists() && it.isFile }
+            ?.readText()?.removePrefix("\uFEFF") ?: run {
             Logger.warning(TAG, "The $tag json file is invalid!")
             return@let null
         }

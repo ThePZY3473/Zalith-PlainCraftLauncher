@@ -306,9 +306,11 @@ private fun LegalMarkdown(markdown: String) {
  * （协议里的 GitHub 链接就是这样溢出的）。零宽空格不占宽度，复制出来也不影响阅读。
  */
 private fun softWrapUrls(text: String): String {
-    val url = Regex("""https?://\S+""")
-    return url.replace(text) { match ->
-        val value = match.value
+    // 协议原文里写成 `<https://…>` 的自动链接，这里是纯文本渲染，尖括号要摘掉
+    val plain = text.replace(Regex("<(https?://[^>]+)>"), "$1")
+    val url = Regex("https?://[^\\s<>\u3000-\u303F\uFF00-\uFFEF]+")
+    return url.replace(plain) { match ->
+        val value = match.value.trimEnd('.', ',', ';', ':', '!', '?', ')')
         if (value.length <= 24) value else value.chunked(24).joinToString("\u200B")
     }
 }

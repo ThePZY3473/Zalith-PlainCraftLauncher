@@ -9,7 +9,7 @@
 
 本政策说明你在 Android 设备上使用 ZPCL 时，信息如何被存储、处理和传输。本政策适用于官方 ZPCL 版本及项目运营的信息服务，不适用于修改版、非官方网站或第三方服务；后者适用其各自规则。
 
-本政策改编自上游 Zalith Launcher 2 的隐私政策（https://github.com/ZalithLauncher/ZalithLauncher2），按本项目的实际分发与联系方式调整；上游依 GPLv3 第 7 条附加的名称与标注要求继续适用。
+本政策改编自上游 Zalith Launcher 2 的隐私政策（<https://github.com/ZalithLauncher/ZalithLauncher2>），按本项目的实际分发与联系方式调整；上游依 GPLv3 第 7 条附加的名称与标注要求继续适用。
 
 ZPCL 主要在设备本地运行。当前版本不包含由 ZPCL Launcher 项目组运营的用户账户系统、广告 SDK 或行为分析 SDK，核心本地功能不要求你向我们注册。
 
@@ -226,8 +226,8 @@ ZPCL 功能、服务提供方或法律义务发生变化时，我们可能更新
 
 如有隐私问题、权利请求或安全报告，可通过以下方式联系 ZPCL Launcher 项目组：
 
-- **项目主页：** https://github.com/zuanxu53-hub/ZPCL-Launcher
-- **问题反馈：** https://github.com/zuanxu53-hub/ZPCL-Launcher/issues
+- **项目主页：** <https://github.com/zuanxu53-hub/ZPCL-Launcher>
+- **问题反馈：** <https://github.com/zuanxu53-hub/ZPCL-Launcher/issues>
 - **电子邮箱：** 3522762908@qq.com
 
 涉及敏感安全问题时，请发送邮件至 3522762908@qq.com，不要在公开 Issue 中披露细节。请勿附上密码、访问令牌、刷新令牌或未经检查的日志。
