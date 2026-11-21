@@ -156,4 +156,10 @@ jobs:
           name: mapping (${{ matrix.arch }})
           path: ZalithLauncher/build/outputs/mapping/release/mapping.txt
 
-      # 刻意不保留 Debug APK 的上传：本仓库只公开源码，构建日志与编译结果足以做校验。
+      - name: Upload Debug APK for ${{ matrix.arch }}
+        if: inputs.variant == 'Debug'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug apk (${{ matrix.arch }})
+          path: ZalithLauncher/build/outputs/apk/debug/*.apk
