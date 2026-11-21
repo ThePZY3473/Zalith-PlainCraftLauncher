@@ -224,29 +224,81 @@ androidComponents {
                             }
                         }
 
-                        if (projectArch == "all") return@doLast
                         val abi = when (projectArch) {
                             "arm" -> "armeabi-v7a"
                             "arm64" -> "arm64-v8a"
                             "x86" -> "x86"
                             "x86_64" -> "x86_64"
-                            else -> return@doLast
+                            else -> null
                         }
-                        val lwjglVersions = file("libs").listFiles { f ->
-                            f.name.matches(Regex("lwjgl-\\d+\\.\\d+\\.\\d+-natives-release\\.aar"))
-                        }
-                            ?.map { Regex("lwjgl-(\\d+\\.\\d+\\.\\d+)-natives-release\\.aar").find(it.name)!!.groupValues[1] }
-                            ?: emptyList()
-                        lwjglVersions.forEach { version ->
-                            val nativesDir = File(assetsDir, "app_runtime/lwjgl/$version/natives")
-                            if (nativesDir.isDirectory) {
-                                nativesDir.listFiles()?.forEach { dir ->
-                                    if (dir.isDirectory && dir.name != abi) {
-                                        logger.lifecycle("Removing non-target-arch natives: $dir")
-                                        dir.deleteRecursively()
+                        if (abi != null) {
+                            val lwjglVersions = file("libs").listFiles { f ->
+                                f.name.matches(Regex("lwjgl-\\d+\\.\\d+\\.\\d+-natives-release\\.aar"))
+                            }
+                                ?.map { Regex("lwjgl-(\\d+\\.\\d+\\.\\d+)-natives-release\\.aar").find(it.name)!!.groupValues[1] }
+                                ?: emptyList()
+                            lwjglVersions.forEach { version ->
+                                val nativesDir = File(assetsDir, "app_runtime/lwjgl/$version/natives")
+                                if (nativesDir.isDirectory) {
+                                    nativesDir.listFiles()?.forEach { dir ->
+                                        if (dir.isDirectory && dir.name != abi) {
+                                            logger.lifecycle("Removing non-target-arch natives: $dir")
+                                            dir.deleteRecursively()
+                                        }
                                     }
                                 }
                             }
+                        }
+
+                        // 重新生成组件清单。LWJGL natives 来自本地的 natives AAR，
+                        // 只会在 mergeAssets 阶段合并进来，源码里的 manifest.json 不含它们；
+                        // 而上面的 ABI 过滤又会删掉非目标架构。不在这里按最终 assets 重写，
+                        // 运行时 UnpackSingleTask 会因目录与清单不一致而重解压，natives 被清掉，
+                        // LWJGL 就永远找不到 liblwjgl.so。
+                        val componentDirs = listOf(
+                            "components/auth_libs",
+                            "components/caciocavallo",
+                            "components/caciocavallo17",
+                            "components/launcher",
+                            "app_runtime/lwjgl/3.3.3",
+                            "app_runtime/lwjgl/3.4.1",
+                            "runtimes/jna",
+                        )
+                        val ignoredNames = setOf("manifest.json", "version")
+                        componentDirs.forEach { component ->
+                            val componentDir = File(assetsDir, component)
+                            if (!componentDir.isDirectory) return@forEach
+                            val entries = componentDir.walkTopDown()
+                                .filter { it.isFile && it.name !in ignoredNames }
+                                .map { it to it.relativeTo(componentDir).invariantSeparatorsPath }
+                                .sortedBy { it.second }
+                                .toList()
+                            val text = buildString {
+                                append("{\n")
+                                append("  \"formatVersion\": 1,\n")
+                                append("  \"component\": \"$component\",\n")
+                                append("  \"algorithm\": \"SHA-1\",\n")
+                                append("  \"files\": [\n")
+                                entries.forEachIndexed { index, entry ->
+                                    val (file, path) = entry
+                                    val digest = java.security.MessageDigest.getInstance("SHA-1")
+                                    file.inputStream().use { input ->
+                                        val buffer = ByteArray(1 shl 16)
+                                        while (true) {
+                                            val read = input.read(buffer)
+                                            if (read <= 0) break
+                                            digest.update(buffer, 0, read)
+                                        }
+                                    }
+                                    val sha1 = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                                    append("    {\"path\": \"$path\", \"size\": ${file.length()}, \"sha1\": \"$sha1\"}")
+                                    append(if (index == entries.lastIndex) "\n" else ",\n")
+                                }
+                                append("  ]\n")
+                                append("}\n")
+                            }
+                            File(componentDir, "manifest.json").writeText(text)
+                            logger.lifecycle("[$tag] manifest: $component (${entries.size} files)")
                         }
                     }
                 }

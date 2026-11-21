@@ -8,6 +8,11 @@ launcher 组件、JNA）在解包前会用 assets 内的 manifest.json 做完整
 用法：
     python3 scripts/gen-asset-manifests.py          # 生成/更新所有清单
     python3 scripts/gen-asset-manifests.py --check  # 只检查，过期则退出码 1
+
+注意：这里只扫描源码 assets 目录。LWJGL 的 natives 来自 libs 下的
+natives AAR，只在 Gradle 的 mergeAssets 阶段合并，源码目录里没有；
+构建时 ZalithLauncher/build.gradle.kts 会按最终（含 ABI 过滤）的 assets
+重新生成一次清单，那份才是随 APK 发布的版本。
 """
 
 import hashlib
