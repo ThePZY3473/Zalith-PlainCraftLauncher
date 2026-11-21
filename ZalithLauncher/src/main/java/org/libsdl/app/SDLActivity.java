@@ -1253,6 +1253,12 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
             }
         }
 
+        // ZPCL：本启动器的所有 Activity 都声明为 sensorLandscape，游戏界面只支持横屏。
+        // SDL 原本按窗口宽高决定方向：中途若拿到竖着的尺寸（窗口重建、分屏、输入法、
+        // 折叠屏/旋转事件），它会把 Activity 改成 SENSOR_PORTRAIT，表现为「游戏中突然被强制竖屏」。
+        // 这里统一按横屏处理。
+        req = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+
         Log.v(TAG, "setOrientation() requestedOrientation=" + req + " width=" + w +" height="+ h +" resizable=" + resizable + " hint=" + hint);
         mSingleton.setRequestedOrientation(req);
     }

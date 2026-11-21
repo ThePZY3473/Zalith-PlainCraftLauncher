@@ -79,8 +79,18 @@ class ModDownloader(
             runBatch(task, tasks, R.string.download_modpack_download_mods_retry, missingMods, skippedMods)
         }
 
-        if (resolvedFailures.get() > 0) {
-            throw DownloadFailedException("${resolvedFailures.get()} mods failed to resolve download links")
+        // 解析不到下载地址的模组按「跳过」处理，不再让整包导入失败。
+        // 整合包里常见几十个模组，其中一两个下架、被限流或没有镜像就会让 28 个一起报错，
+        // 用户实际需要的是「能装的先装上」。只有全部模组都失败时才当作真失败。
+        val unresolved = resolvedFailures.get()
+        if (unresolved > 0) {
+            Logger.warning(
+                TAG,
+                "$unresolved mods failed to resolve download links, skipped (missing=$missingMods)"
+            )
+            if (tasks.isEmpty() && mods.isNotEmpty()) {
+                throw DownloadFailedException("all $unresolved mods failed to resolve download links")
+            }
         }
 
         task.updateProgress(1f)
