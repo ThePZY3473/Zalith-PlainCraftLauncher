@@ -172,6 +172,7 @@ import com.zalith.pcl.ui.androidText
 import com.zalith.pcl.ui.screens.content.download.assets.elements.AssetsPage
 import com.zalith.pcl.ui.screens.content.download.assets.elements.initAll
 import com.zalith.pcl.ui.toAndroidString
+import com.zalith.pcl.game.download.assets.platform.mcim.mapMCIMMirrorUrls
 import com.zalith.pcl.utils.network.downloadFile
 import com.zalith.pcl.utils.network.downloadFileFromSources
 import com.zalith.pcl.utils.network.withSpeedReport
@@ -2605,7 +2606,7 @@ internal fun startModpackImport(
                     // 「镜像 + 官方」一起丢进分段池，慢的那一半连接把整体拖到几百 KB/s。
                     // 需要中转的用户可在「设置 → 下载 → 资源平台下载源」单独切镜像。
                     downloadFileFromSources(
-                        urls = listOf(version.platformDownloadUrl()),
+                        urls = version.platformDownloadUrl().mapMCIMMirrorUrls(),
                         outputFile = output,
                         sha1 = version.platformSha1(),
                         // 有了大小才能分段并行：没有它，一个几百 MB 的包只能单连接慢慢爬

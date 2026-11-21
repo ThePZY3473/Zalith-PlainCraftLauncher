@@ -33,6 +33,7 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -141,6 +142,15 @@ object SegmentedDownloader {
     /** 一次分段最多同时用几个源（源太多反而把每个源的速度摊薄，探测请求也变多） */
     private const val MAX_SOURCES = 3
 
+    /** 测速时每个源拉多少字节 */
+    private const val MEASURE_BYTES = 256L * 1024
+
+    /** 测速的单源时间上限 */
+    private const val MEASURE_TIMEOUT_MS = 4_000L
+
+    /** 慢于最快源这个比例的源直接不用：它就是今天那个 576 KiB/s 的来源 */
+    private const val SOURCE_SPEED_FLOOR_RATIO = 0.6
+
     private val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
 
     private val CONTENT_RANGE = Regex("""bytes\s+(\d+)-(\d+)/(\d+)""")
@@ -229,7 +239,7 @@ object SegmentedDownloader {
      * 大小对不上的源直接丢掉 —— 不同大小的源拼在一起只会得到坏文件。
      * 一个都不可用才返回 null，由调用方回退到单连接。
      */
-    private fun collectSources(urls: List<String>): List<Source>? {
+    private suspend fun collectSources(urls: List<String>): List<Source>? {
         val result = mutableListOf<Source>()
         var total = -1L
         for (candidate in urls.distinct()) {
@@ -253,7 +263,117 @@ object SegmentedDownloader {
             result += Source(url, probe.total, probe.validator)
         }
         if (result.isEmpty() || total < MIN_TOTAL_SIZE) return null
-        return result
+        return pickFastest(result)
+    }
+
+    /**
+     * 多源时实测一遍再决定用谁（PCL 的 `NetTaskSourceProbe` 就是干这个的）。
+     *
+     * 光看「谁先返回第一个字节」判断不了带宽：以前那个 MCIM 中转握手很快、单连接只有
+     * 二十几 KB/s，混进分段池直接把整体拖到几百 KB/s。这里每个源实拉 256 KB 计时，
+     * 慢于最快源 60% 的直接淘汰 —— 宁可用一个快源开满段，也不用两个一快一慢。
+     */
+    private suspend fun pickFastest(sources: List<Source>): List<Source> {
+        if (sources.size <= 1) return sources
+        val speeds = sources.map { source ->
+            withContext(SEGMENT_DISPATCHER) { measureSpeed(source) }
+        }
+        val best = speeds.maxOrNull() ?: 0L
+        if (best <= 0L) return sources
+        val floor = (best * SOURCE_SPEED_FLOOR_RATIO).toLong()
+        Logger.info(
+            TAG,
+            "Source probe: " + sources.indices.joinToString {
+                "${sources[it].url.host}=${speeds[it] / 1024}KB/s"
+            }
+        )
+        val kept = sources.indices
+            .filter { speeds[it] >= floor }
+            .sortedByDescending { speeds[it] }
+            .map { sources[it] }
+        return kept.ifEmpty { sources }
+    }
+
+    /** 从单个源实拉 [MEASURE_BYTES] 计时，失败返回 0 */
+    private fun measureSpeed(source: Source): Long {
+        val started = System.currentTimeMillis()
+        var read = 0L
+        val connection = open(source.url)
+        try {
+            connection.setRequestProperty("Range", "bytes=0-${MEASURE_BYTES - 1}")
+            connection.setRequestProperty("Accept-Encoding", "identity")
+            if (connection.responseCode != 206) return 0L
+            val deadline = started + MEASURE_TIMEOUT_MS
+            connection.inputStream.use { input ->
+                val buffer = ByteArray(BUFFER_SIZE)
+                while (read < MEASURE_BYTES) {
+                    val want = minOf(buffer.size.toLong(), MEASURE_BYTES - read).toInt()
+                    val n = input.read(buffer, 0, want)
+                    if (n < 0) break
+                    read += n
+                    if (System.currentTimeMillis() > deadline) break
+                }
+            }
+        } catch (e: Exception) {
+            return 0L
+        } finally {
+            runCatching { connection.disconnect() }
+        }
+        val elapsed = (System.currentTimeMillis() - started).coerceAtLeast(1L)
+        return read * 1000L / elapsed
+    }
+
+
+    /**
+     * 续传元数据：`total` 与 `sha1` 用来确认「这还是同一个文件」，
+     * `seg=` 是还没下完的区间（绝对偏移，含两端）。文件按偏移写，所以不需要合并。
+     */
+    private fun loadResume(meta: File, part: File, total: Long, sha1: String?): List<Pair<Long, Long>>? {
+        if (!part.isFile || part.length() != total || !meta.isFile) return null
+        val lines = runCatching { meta.readLines() }.getOrNull() ?: return null
+        val savedTotal = lines.firstOrNull { it.startsWith("total=") }
+            ?.removePrefix("total=")?.toLongOrNull() ?: return null
+        val savedSha1 = lines.firstOrNull { it.startsWith("sha1=") }?.removePrefix("sha1=").orEmpty()
+        if (savedTotal != total) return null
+        if (savedSha1 != (sha1 ?: "")) return null
+
+        val ranges = lines.asSequence()
+            .filter { it.startsWith("seg=") }
+            .mapNotNull { line ->
+                val body = line.removePrefix("seg=")
+                val dash = body.indexOf('-')
+                if (dash <= 0) return@mapNotNull null
+                val start = body.substring(0, dash).toLongOrNull() ?: return@mapNotNull null
+                val end = body.substring(dash + 1).toLongOrNull() ?: return@mapNotNull null
+                if (start > end) null else start to end
+            }
+            .toList()
+        return ranges.takeIf { it.isNotEmpty() }
+    }
+
+    private fun saveResume(meta: File, total: Long, sha1: String?, segments: List<Segment>) {
+        val pending = segments.mapNotNull { segment ->
+            val position = segment.cursor.get()
+            val end = segment.end.get()
+            if (position <= end) position to end else null
+        }
+        // 全下完了就别再写：收尾时这个文件马上会被删掉
+        if (pending.isEmpty()) return
+        val text = buildString {
+            append("total=").append(total).append('\n')
+            append("sha1=").append(sha1 ?: "").append('\n')
+            pending.forEach { (start, end) ->
+                append("seg=").append(start).append('-').append(end).append('\n')
+            }
+        }
+        runCatching {
+            val tmp = File(meta.parentFile, meta.name + ".tmp")
+            tmp.writeText(text)
+            if (!tmp.renameTo(meta)) {
+                meta.delete()
+                tmp.renameTo(meta)
+            }
+        }
     }
 
     /** 一段待下的区间；`cursor` 是当前写到哪，`end` 会在切分时被调小 */
@@ -298,12 +418,23 @@ object SegmentedDownloader {
 
         val segmentCount = (total / minSegmentSize).toInt().coerceIn(2, maxSegments)
         val temp = File(parent, "${targetFile.name}.zpart")
-        runCatching { if (temp.exists()) temp.delete() }
+        val meta = File(parent, "${targetFile.name}.zpart.meta")
+
+        // 【断点续传】上次没下完的 .zpart 还在、大小与 sha1 都对得上，就接着下。
+        // 落盘是按绝对偏移写的，所以只要记下每段「已经写到哪」就能精确续上。
+        val resumed = loadResume(meta = meta, part = temp, total = total, sha1 = sha1)
+        if (resumed == null) {
+            runCatching { if (temp.exists()) temp.delete() }
+            runCatching { if (meta.exists()) meta.delete() }
+        } else {
+            Logger.info(TAG, "Resume ${targetFile.name}: ${resumed.size} pending range(s)")
+        }
 
         Logger.info(
             TAG,
             "Segmented download: ${targetFile.name}, $total bytes, " +
-                "$segmentCount initial segments, ${sources.size} source(s)"
+                "$segmentCount initial segments, ${sources.size} source(s)" +
+                if (resumed != null) ", resuming" else ""
         )
 
         // 心跳：任何一段落了字节就更新。监督者据此判断是不是整体卡死
@@ -340,17 +471,30 @@ object SegmentedDownloader {
                             }
                         }
 
-                        for (index in 0 until segmentCount) {
-                            // 初始边界按乘法分配，最后一段吃掉除不尽的余数
-                            val start = total * index / segmentCount
-                            val endInclusive = total * (index + 1) / segmentCount - 1
-                            launchWorker(Segment(start, endInclusive, index % sources.size))
+                        if (resumed != null) {
+                            resumed.forEachIndexed { index, (start, endInclusive) ->
+                                launchWorker(Segment(start, endInclusive, index % sources.size))
+                            }
+                        } else {
+                            for (index in 0 until segmentCount) {
+                                // 初始边界按乘法分配，最后一段吃掉除不尽的余数
+                                val start = total * index / segmentCount
+                                val endInclusive = total * (index + 1) / segmentCount - 1
+                                launchWorker(Segment(start, endInclusive, index % sources.size))
+                            }
                         }
 
                         // 监督者：还有空位就把「剩得最多」的那段的尾巴切出去（PCL 的 TryBeginThread）
                         val supervisor = launch(Dispatchers.Default) {
+                            var lastSaved = 0L
                             while (isActive) {
                                 delay(SUPERVISE_INTERVAL_MS)
+                                // 每 2 秒把「还没下完的区间」落盘，进程被杀最多丢两秒的进度
+                                val now = System.currentTimeMillis()
+                                if (now - lastSaved > 2_000L) {
+                                    lastSaved = now
+                                    saveResume(meta, total, sha1, segments)
+                                }
                                 // 卡死判定：还有没下完的字节，却已经 STALL_TIMEOUT_MS 没有任何进展
                                 val remaining = segments.sumOf { it.remaining() }
                                 if (remaining > 0L &&
@@ -398,9 +542,17 @@ object SegmentedDownloader {
             if (!temp.renameTo(targetFile)) {
                 throw IOException("Cannot move temp file to $targetFile")
             }
+            meta.delete()
             return true
         } catch (e: Throwable) {
-            runCatching { temp.delete() }
+            // 校验类失败说明拼出来的东西是坏的，留着只会被下次误用；
+            // 网络类失败保留 .zpart + meta，下次接着下
+            val broken = e.message?.startsWith("Size mismatch") == true ||
+                e.message?.startsWith("SHA-1 mismatch") == true
+            if (broken) {
+                runCatching { temp.delete() }
+                runCatching { meta.delete() }
+            }
             throw e
         }
     }
