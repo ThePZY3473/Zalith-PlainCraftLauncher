@@ -31,6 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runInterruptible
 import java.io.File
 import java.io.IOException
@@ -42,10 +43,26 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 private const val TAG = "SegmentedDownloader"
+
+/**
+ * 阻塞式网络 IO 专用线程池（按需扩容）。
+ *
+ * `Dispatchers.IO` 默认上限是 64 条线程，而这里每条连接都会**独占**一条：
+ * 批量下载 32 个文件 + 最多 4 个文件在做分段（每份最多 12 段）—— 加起来远超 64。
+ * 池子打满之后新任务只能排队，界面上就是「进度卡住、速度 0 B/s」：
+ * 不是网络断了，是根本没线程去读。用一个能扩容的池子把这类阻塞和协程调度解耦。
+ */
+private val SEGMENT_DISPATCHER = Executors.newCachedThreadPool { runnable ->
+    Thread(runnable, "pcl-segment-io").apply { isDaemon = true }
+}.asCoroutineDispatcher()
+
+/** 连续这么久没有任何一个字节落盘，就认定这次分段尝试卡死，退回单连接 */
+private const val STALL_TIMEOUT_MS = 30_000L
 
 /**
  * 把**一个大文件**切成若干段、用多条连接同时拉，最后合并校验。
@@ -67,10 +84,10 @@ private const val TAG = "SegmentedDownloader"
  * ---- 其它几条来自 PCL 的经验
  *
  * 1. `Accept-Encoding: identity`：压缩流的 Range 按压缩后字节算，多段拼接必然错位。
- * 2. 某些源**明确不适合多线程**（BMCLAPI 会限流返 403/429、GitHub 会掐连接），
- *    这些域名直接不分段，交给单连接。
- * 3. 每段自己重试（PCL 的线程级重试），一段挂了不必把整个文件从头再来。
- * 4. 临时文件与目标同目录，最后 `renameTo` 才是原子的；跨目录会退化成复制。
+ * 2. 每段自己重试（PCL 的线程级重试），一段挂了不必把整个文件从头再来。
+ * 3. 临时文件与目标同目录，最后 `renameTo` 才是原子的；跨目录会退化成复制。
+ * 4. 唯一保留「不分段」的源是 BMCLAPI —— 它按 IP 并发限流，段数一多就返 403/429。
+ *    GitHub / OptiFine / momo 这些我们不再拦，它们本身没有并发限制。
  */
 object SegmentedDownloader {
 
@@ -116,24 +133,20 @@ object SegmentedDownloader {
     private const val BUFFER_SIZE = 64 * 1024
     private const val MAX_REDIRECTS = 8
 
+    /** 一次分段最多同时用几个源（源太多反而把每个源的速度摊薄，探测请求也变多） */
+    private const val MAX_SOURCES = 3
+
     private val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
 
     private val CONTENT_RANGE = Regex("""bytes\s+(\d+)-(\d+)/(\d+)""")
 
     /**
-     * 不适合多线程的域名（照搬 PCL 的黑名单思路）。
+     * 不建议多线程的域名：只有 BMCLAPI 一家。
      *
-     * BMCLAPI 的限流很激进：并发一多就返 403/429，反而比单连接慢；
-     * GitHub 的下载链路会掐多连接。这些源交给 [Fetcher] 单连接即可。
+     * 它的限流是按 IP 并发算的，段数一多就返 403/429，实际比单连接更慢；
+     * 其它源（GitHub、OptiFine 等）没有任何这类限制，照常分段。
      */
-    private val MULTI_THREAD_BLOCKED_HOSTS = listOf(
-        "bmclapi",
-        "github.com",
-        "githubusercontent",
-        "optifine.net",
-        "momot.rs",
-        "meloong.com",
-    )
+    private val MULTI_THREAD_BLOCKED_HOSTS = listOf("bmclapi")
 
     private fun isMultiThreadBlocked(url: URL): Boolean {
         val host = url.host.lowercase()
@@ -164,49 +177,36 @@ object SegmentedDownloader {
         }
 
         try {
-            for (candidate in urls.distinct()) {
-                val url = try {
-                    URL(candidate)
-                } catch (e: Exception) {
-                    continue
+            // 【多源分流】PCL 的 TryBeginThread 让每条线程轮转着从源池里取源：慢源只拖累
+            // 它手里那几段，其它连接照样跑满。以前我们是「串行试源」—— 第一个源慢就整个
+            // 文件都慢，这是几百 MB 的包跑成几百 KB/s 的另一半原因。
+            val sources = collectSources(urls) ?: return false
+            var reported = 0L
+            var succeeded = false
+            try {
+                val result = attempt(
+                    sources = sources,
+                    targetFile = targetFile,
+                    sha1 = sha1,
+                    maxSegments = maxSegments,
+                    minSegmentSize = minSegmentSize,
+                ) { delta ->
+                    reported += delta
+                    onBytes(delta)
                 }
-                if (!url.protocol.equals("http", ignoreCase = true) &&
-                    !url.protocol.equals("https", ignoreCase = true)
-                ) {
-                    continue
+                if (result) {
+                    succeeded = true
+                    return true
                 }
-                if (isMultiThreadBlocked(url)) {
-                    Logger.info(TAG, "Multi-thread disabled for host: ${url.host}")
-                    continue
-                }
-
-                var reported = 0L
-                var succeeded = false
-                try {
-                    val result = attempt(
-                        url = url,
-                        targetFile = targetFile,
-                        sha1 = sha1,
-                        maxSegments = maxSegments,
-                        minSegmentSize = minSegmentSize,
-                    ) { delta ->
-                        reported += delta
-                        onBytes(delta)
-                    }
-                    if (result) {
-                        succeeded = true
-                        return true
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Logger.warning(TAG, "Segmented download gave up: $candidate", e)
-                } finally {
-                    // 已经报给统计的字节要扣回去：接下来 Fetcher 会把这个文件从头下一遍，
-                    // 不扣的话总进度会先虚高再回落（下载页看起来就是「100% 又变回 60%」）。
-                    if (!succeeded && reported != 0L) {
-                        onBytes(-reported)
-                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.warning(TAG, "Segmented download gave up (${sources.size} source(s))", e)
+            } finally {
+                // 已经报给统计的字节要扣回去：接下来 Fetcher 会把这个文件从头下一遍，
+                // 不扣的话总进度会先虚高再回落（下载页看起来就是「100% 又变回 60%」）。
+                if (!succeeded && reported != 0L) {
+                    onBytes(-reported)
                 }
             }
             return false
@@ -215,15 +215,54 @@ object SegmentedDownloader {
         }
     }
 
+    /** 一个支持分段的候选源 */
+    private class Source(val url: URL, val total: Long, val validator: String?)
+
+    /**
+     * 把所有能分段的候选源探一遍（每个只发一次 `bytes=0-0` 的请求）。
+     *
+     * 大小对不上的源直接丢掉 —— 不同大小的源拼在一起只会得到坏文件。
+     * 一个都不可用才返回 null，由调用方回退到单连接。
+     */
+    private fun collectSources(urls: List<String>): List<Source>? {
+        val result = mutableListOf<Source>()
+        var total = -1L
+        for (candidate in urls.distinct()) {
+            if (result.size >= MAX_SOURCES) break
+            val url = runCatching { URL(candidate) }.getOrNull() ?: continue
+            if (!url.protocol.equals("http", ignoreCase = true) &&
+                !url.protocol.equals("https", ignoreCase = true)
+            ) {
+                continue
+            }
+            if (isMultiThreadBlocked(url)) {
+                Logger.info(TAG, "Multi-thread disabled for host: ${url.host}")
+                continue
+            }
+            val probe = probe(url) ?: continue
+            if (total < 0L) total = probe.total
+            if (probe.total != total) {
+                Logger.warning(TAG, "Skip source with mismatched size: ${url.host}")
+                continue
+            }
+            result += Source(url, probe.total, probe.validator)
+        }
+        if (result.isEmpty() || total < MIN_TOTAL_SIZE) return null
+        return result
+    }
+
     /** 一段待下的区间；`cursor` 是当前写到哪，`end` 会在切分时被调小 */
-    private class Segment(start: Long, end: Long) {
+    private class Segment(start: Long, end: Long, sourceIndex: Int) {
         val cursor = AtomicLong(start)
         val end = AtomicLong(end)
+
+        /** 这一段现在从哪个源取；重试时轮转，避免死磕一个坏源 */
+        val source = AtomicInteger(sourceIndex)
 
         fun remaining(): Long = (end.get() - cursor.get() + 1).coerceAtLeast(0L)
 
         /** 把尾巴按 [ratio] 切出去；剩余不够或已经被别人切过就返回 null */
-        fun splitTail(ratio: Double): Segment? {
+        fun splitTail(ratio: Double, sourceCount: Int): Segment? {
             val currentEnd = end.get()
             val currentCursor = cursor.get()
             val remaining = currentEnd - currentCursor + 1
@@ -232,21 +271,21 @@ object SegmentedDownloader {
             if (newStart <= currentCursor || newStart > currentEnd) return null
             // 先缩小这一段的右边界：正在跑的那条连接下一轮读到这里就停了
             if (!end.compareAndSet(currentEnd, newStart - 1)) return null
-            return Segment(newStart, currentEnd)
+            // 切出来的新段换一个源，等于把负载摊到多条链路上
+            return Segment(newStart, currentEnd, (source.get() + 1) % sourceCount.coerceAtLeast(1))
         }
     }
 
-    /** 单个候选源的一次分段下载；false = 这个源不适合分段（不是错误） */
+    /** 用整组候选源做一次分段下载；false = 没有任何源适合分段（不是错误） */
     private suspend fun attempt(
-        url: URL,
+        sources: List<Source>,
         targetFile: File,
         sha1: String?,
         maxSegments: Int,
         minSegmentSize: Long,
         report: (Long) -> Unit,
     ): Boolean {
-        val probe = probe(url) ?: return false
-        val total = probe.total
+        val total = sources.first().total
         if (total < MIN_TOTAL_SIZE) return false
 
         val parent = targetFile.absoluteFile.parentFile ?: return false
@@ -259,8 +298,15 @@ object SegmentedDownloader {
         Logger.info(
             TAG,
             "Segmented download: ${targetFile.name}, $total bytes, " +
-                "$segmentCount initial segments, validator=${probe.validator ?: "none"}"
+                "$segmentCount initial segments, ${sources.size} source(s)"
         )
+
+        // 心跳：任何一段落了字节就更新。监督者据此判断是不是整体卡死
+        val heartbeat = AtomicLong(System.currentTimeMillis())
+        val onBytes: (Long) -> Unit = { delta ->
+            if (delta > 0L) heartbeat.set(System.currentTimeMillis())
+            report(delta)
+        }
 
         try {
             RandomAccessFile(temp, "rw").use { raf ->
@@ -273,9 +319,9 @@ object SegmentedDownloader {
 
                         fun launchWorker(segment: Segment) {
                             segments += segment
-                            jobs += scope.launch(Dispatchers.IO) {
+                            jobs += scope.launch(SEGMENT_DISPATCHER) {
                                 runInterruptible {
-                                    runSegment(url, channel, segment, probe.validator, report)
+                                    runSegment(sources, channel, segment, onBytes)
                                 }
                             }
                         }
@@ -284,18 +330,28 @@ object SegmentedDownloader {
                             // 初始边界按乘法分配，最后一段吃掉除不尽的余数
                             val start = total * index / segmentCount
                             val endInclusive = total * (index + 1) / segmentCount - 1
-                            launchWorker(Segment(start, endInclusive))
+                            launchWorker(Segment(start, endInclusive, index % sources.size))
                         }
 
                         // 监督者：还有空位就把「剩得最多」的那段的尾巴切出去（PCL 的 TryBeginThread）
                         val supervisor = launch(Dispatchers.Default) {
                             while (isActive) {
                                 delay(SUPERVISE_INTERVAL_MS)
+                                // 卡死判定：还有没下完的字节，却已经 STALL_TIMEOUT_MS 没有任何进展
+                                val remaining = segments.sumOf { it.remaining() }
+                                if (remaining > 0L &&
+                                    System.currentTimeMillis() - heartbeat.get() > STALL_TIMEOUT_MS
+                                ) {
+                                    throw IOException(
+                                        "Segmented download stalled: $remaining bytes left, " +
+                                            "no data for ${STALL_TIMEOUT_MS}ms"
+                                    )
+                                }
                                 if (jobs.size >= maxSegments) continue
                                 val candidate = segments
                                     .filter { it.remaining() >= SPLIT_MIN_REMAINING }
                                     .maxByOrNull { it.remaining() } ?: continue
-                                val tail = candidate.splitTail(SPLIT_TAIL_RATIO) ?: continue
+                                val tail = candidate.splitTail(SPLIT_TAIL_RATIO, sources.size) ?: continue
                                 Logger.debug(
                                     TAG,
                                     "Split segment for ${targetFile.name}: tail $SPLIT_TAIL_RATIO"
@@ -339,17 +395,19 @@ object SegmentedDownloader {
      * 段被监督者切开后 `remaining()` 会立刻变成 0，这里自然收工。
      */
     private fun runSegment(
-        url: URL,
+        sources: List<Source>,
         channel: FileChannel,
         segment: Segment,
-        validator: String?,
         report: (Long) -> Unit,
     ) {
+        // 每个源给 SEGMENT_RETRY 次机会；换源时从当前进度续上，不重下整份
         var attempt = 0
+        val maxAttempts = SEGMENT_RETRY * sources.size
         while (true) {
             if (segment.remaining() <= 0L) return
+            val source = sources[segment.source.get().mod(sources.size)]
             try {
-                fetchSegment(url, channel, segment, validator, report)
+                fetchSegment(source.url, channel, segment, source.validator, report)
                 if (segment.remaining() <= 0L) return
                 // 连接正常结束但这段的字节没收全：按断流处理，重试时从 cursor 续传
                 throw IOException("Segment ended early, ${segment.remaining()} bytes left")
@@ -357,10 +415,16 @@ object SegmentedDownloader {
                 throw e
             } catch (e: Throwable) {
                 attempt++
-                if (attempt > SEGMENT_RETRY) throw e
-                Logger.warning(TAG, "Segment retry #$attempt (left=${segment.remaining()})", e)
+                if (attempt > maxAttempts) throw e
+                Logger.warning(
+                    TAG,
+                    "Segment retry #$attempt on ${source.url.host} (left=${segment.remaining()})",
+                    e
+                )
+                // 换下一个源再试：PCL 的线程也是这么在源之间轮转的
+                segment.source.incrementAndGet()
                 // 这里跑在 runInterruptible 包住的 IO 线程上，退避用 sleep 即可
-                Thread.sleep(200L * attempt)
+                Thread.sleep(200L * attempt.coerceAtMost(5))
             }
         }
     }

@@ -172,7 +172,10 @@ import com.zalith.pcl.ui.androidText
 import com.zalith.pcl.ui.screens.content.download.assets.elements.AssetsPage
 import com.zalith.pcl.ui.screens.content.download.assets.elements.initAll
 import com.zalith.pcl.ui.toAndroidString
+import com.zalith.pcl.game.download.assets.platform.mcim.mapMCIMMirrorUrls
 import com.zalith.pcl.utils.network.downloadFile
+import com.zalith.pcl.utils.network.downloadFileFromSources
+import com.zalith.pcl.utils.network.withSpeedReport
 import com.zalith.pcl.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -2591,22 +2594,35 @@ internal fun startModpackImport(
             // 「包不见了」上面）。这里自己留一份原因，报错时才说得出人话。
             downloadFailure = null
             try {
-                downloadFile(
-                    url = version.platformDownloadUrl(),
-                    outputFile = output,
-                    sha1 = version.platformSha1(),
-                    // 有了大小才能分段并行：没有它，一个几百 MB 的包只能单连接慢慢爬
-                    expectedSize = total,
-                    sizeCallback = { size ->
-                        done += size
-                        task.updateProgress((done.toDouble() / total.toDouble()).toFloat())
-                    },
-                )
+                // 【速度显示】之前这里从头到尾没调过 `task.updateSpeed`，界面上的「下载速度」
+                // 就一直是 0 B/s —— 看着像卡死，其实是没上报。`withSpeedReport` 每秒把
+                // 这一秒的增量喂给任务，跟原生安装器、批量下载那几条链路一致。
+                withSpeedReport(
+                    onSpeedReport = { bytes -> task.updateSpeed(bytes) },
+                    onClear = { task.clearSpeed() },
+                ) { report ->
+                    // 走候选源列表（官方 + MCIM 镜像）：分段下载会把不同段摊到不同源上，
+                    // 哪个源慢只影响它那几段，而不是把整个包拖住 —— PCL 的源池就是这个思路
+                    downloadFileFromSources(
+                        urls = version.platformDownloadUrl().mapMCIMMirrorUrls(),
+                        outputFile = output,
+                        sha1 = version.platformSha1(),
+                        // 有了大小才能分段并行：没有它，一个几百 MB 的包只能单连接慢慢爬
+                        expectedSize = total,
+                        sizeCallback = { size ->
+                            done += size
+                            task.updateProgress((done.toDouble() / total.toDouble()).toFloat())
+                            report(size)
+                        },
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
                 downloadFailure = e
                 throw e
+            } finally {
+                task.clearSpeed()
             }
             task.updateProgress(1f)
         },
