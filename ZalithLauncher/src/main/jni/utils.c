@@ -1,3 +1,4 @@
+#include <android/log.h>
 #include <jni.h>
 #include <dlfcn.h>
 #include <stdio.h>
@@ -104,7 +105,11 @@ JNIEXPORT jboolean JNICALL Java_com_zalith_pcl_bridge_ZLBridge_dlopen(JNIEnv *en
 	const char *nameUtf = (*env)->GetStringUTFChars(env, name, 0);
 	void* handle = dlopen(nameUtf, RTLD_GLOBAL | RTLD_LAZY);
 	if (!handle) {
-		LOG_TO_E("DLOPEN: %s , failed ( %s )", nameUtf, dlerror());
+		const char *err = dlerror();
+		LOG_TO_E("DLOPEN: %s , failed ( %s )", nameUtf, err ? err : "unknown");
+		// stderr 在 Android 应用进程里通常被丢弃，同时写一份到 logcat 方便排查
+		__android_log_print(ANDROID_LOG_ERROR, "ZLBridge",
+		                    "dlopen(%s) failed: %s", nameUtf, err ? err : "unknown");
 	} else {
 		LOG_TO_D("DLOPEN: %s , success", nameUtf);
 	}

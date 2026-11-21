@@ -12,6 +12,7 @@
  * 和/或修改它。
  */
 
+#include <android/log.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <sys/prctl.h>
@@ -55,14 +56,24 @@ void *uselocale(void *locale) {
     return old;
 }
 
-char *nl_langinfo(nl_item item) {
+char *shim_nl_langinfo_impl(nl_item item) {
     // 绝大多数调用只关心 CODESET，返回 UTF-8 即可；其余给空串。
     return item == SHIM_CODESET ? (char *) "UTF-8" : (char *) "";
 }
 
+// 预编译库引用的是非默认版本 nl_langinfo@LIBC_O，用 .symver 精确导出该版本。
+// 只靠 --version-script 会生成默认版本 @@LIBC_O，部分 bionic linker 版本匹配
+// 逻辑更严格时仍会判为不匹配。
+__asm__(".symver shim_nl_langinfo_impl,nl_langinfo@LIBC_O");
+
 char *nl_langinfo_l(nl_item item, void *locale) {
     (void) locale;
-    return nl_langinfo(item);
+    return shim_nl_langinfo_impl(item);
+}
+
+__attribute__((constructor)) static void shim_loaded(void) {
+    __android_log_print(ANDROID_LOG_INFO, "locale_shim",
+                        "liblocale_shim.so loaded (pid=%d)", (int) getpid());
 }
 
 /* ------------------------------------------------------------------------- */
