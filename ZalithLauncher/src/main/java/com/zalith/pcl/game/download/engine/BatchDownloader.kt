@@ -105,7 +105,12 @@ class BatchDownloader(
             }
 
             try {
-                val fileJobs = requests.map { request ->
+                // 【大文件先下】按声明大小从大到小排队。
+                // 反过来的后果很具体：几百个小文件先跑完，最后剩一两个几十 MB 的 jar，
+                // 收尾时并发从 32 掉到 1~2 条连接 —— 进度条最后那几个百分点能吃掉一半时间。
+                // 先把大的吃掉，尾巴就只剩几十个几百 KB 的小文件，几秒收干净。
+                val ordered = requests.sortedByDescending { it.expectedSize }
+                val fileJobs = ordered.map { request ->
                     launch(Dispatchers.IO) {
                         //先取得一个文件许可再打开临时文件：
                         //否则全部作业同时持着打开的句柄排队，海量句柄会拖垮存储层
