@@ -7,7 +7,7 @@
 [Plain Craft Launcher 2](https://github.com/Hex-Dragon/PCL2)（下称 PCL2）的版式与交互重做，
 使用 **Jetpack Compose** 编写。
 
-> 当前版本：**1.5.4（versionCode 200087）**，基于上游 Zalith Launcher 2 **2.8.1**
+> 当前版本：**1.5.5（versionCode 200088）**，基于上游 Zalith Launcher 2 **2.8.1**
 > 本项目是 Zalith Launcher 2 的**非官方修改版**，与上游官方无关联。
 > 对外名称为 ZPCL Launcher；上游 GPLv3 第 7 条附加条款与当前界面标注位置见 [NOTICE.md](NOTICE.md)。
 
@@ -161,14 +161,14 @@ export JAVA_HOME=/path/to/jdk17
 
 ## 版本与发布
 
-本仓库用于公开开发源码，不将启动器 APK 提交到 Git 或作为 GitHub Release 附件。仓库仍跟踪部分构建所用的预编译依赖；它们不是启动器安装包，也不是源码，其来源与许可见 [第三方组件清单](docs/THIRD_PARTY.md)。
+安装包以 **GitHub Release 附件**的形式发布，每个 Release 的正文注明它对应的源码 tag；官网 <https://zpcl.fun> 是对外的下载入口，`url_home` 也指向它。仓库仍跟踪部分构建所用的预编译依赖；它们不是启动器安装包，也不是源码，其来源与许可见 [第三方组件清单](docs/THIRD_PARTY.md)。
 
 **关于 CI：** 推送触发的 [构建工作流](.github/workflows/push_ci.yml) 只做 Debug 编译校验，不向 Debug 构建注入正版登录或 CurseForge 配置，也不上传 APK 产物。只有以 `Release` 变体调用时才使用仓库 Secrets；这类构建由维护者自己发起，不构成公开下载渠道。
 
 正式发行时：
 
-1. 维护 `ZalithLauncher/gradle.properties` 的显示版本与 `versionCode`；要覆盖升级，`versionCode` 必须递增。
-2. 仅在计划推送客户端更新时同步 `latest_version_md.json` 的版本、`code` 和更新说明。
+1. 维护 `ZalithLauncher/gradle.properties` 的显示版本与 `versionCode`；要覆盖升级，`versionCode` 必须递增，两条线一起改。
+2. 同步 `latest_version_md.json` 的版本、`code`、官网地址与更新说明——客户端「检查更新」读的就是它。
 3. 在 APK 下载处注明该具体制品对应的源码提交、标签或归档，不以开发分支或仓库首页代替正式 APK 的对应源。详见 [NOTICE.md](NOTICE.md)。
 
 `launcher_name` 与 `CLIENT_TOKEN_SEED` 属于登录与数据目录的标识，**不要修改**。

@@ -152,8 +152,8 @@ private const val UPDATE_TIMEOUT_MS = 60_000L
  * 官网兜底地址。
  *
  * `zpcl.fun` 是当前证书实际签发的域名（`zpcl.craftmc.cn` 会 301 过来）。编译期的
- * `url_home` 写的是 `z-pcl.cc.cd:28722`，实测部分网络下这个端口连不上 ——
- * 两个都放进候选里探测，比赌其中一个可靠。
+ * `url_home` 现在就是 `zpcl.fun`；仍保留这个常量作兜底，编译期配置被改错时
+ * 官网入口不会一起失效。
  */
 private const val FALLBACK_SITE_BASE = "https://zpcl.fun"
 
@@ -254,7 +254,7 @@ class LauncherUpgradeViewModel: ViewModel() {
      * 官网候选地址。
      *
      * 这里有三个来源，按优先级：
-     *  1. [BuildKeys.URL_HOME] —— 编译期 `url_home`（当前写的是 `z-pcl.cc.cd:28722`）；
+     *  1. [BuildKeys.URL_HOME] —— 编译期 `url_home`（当前写的是 `zpcl.fun`）；
      *  2. [PclRemoteContent.baseUrl] —— 运行期可被 MMKV 覆盖的那个站点根地址；
      *  3. `https://zpcl.fun` —— 实测可用的正式域名兜底。
      *

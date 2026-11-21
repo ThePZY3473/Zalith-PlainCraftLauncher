@@ -1,37 +1,37 @@
 {
-  "code": 200076,
-  "version": "1.5.4",
-  "created_at": "2026-11-14T09:26:00Z",
+  "code": 200088,
+  "version": "1.5.5",
+  "created_at": "2026-11-21T00:10:00Z",
   "default_cloud_drive": {
     "language": "NULL",
-    "link": "https://z-pcl.cc.cd:28722",
+    "link": "https://zpcl.fun",
     "links": []
   },
   "cloud_drives": [
     {
       "language": "zh",
-      "link": "https://z-pcl.cc.cd:28722",
+      "link": "https://zpcl.fun",
       "links": []
     },
     {
       "language": "en",
-      "link": "https://z-pcl.cc.cd:28722",
+      "link": "https://zpcl.fun",
       "links": []
     }
   ],
   "files": [],
   "default_body": {
     "language": "NULL",
-    "markdown": "这是 **ZPCL Launcher** 的 1.5.4 版本。\n\n- 版本号：1.5.4（versionCode 200076）\n- **包名改为 `com.zpcl.launcher`**：这是一个新应用，旧版本（`com.zalith.pcl`）的设置、实例与登录态\n  不会自动迁移。升级前请先在旧版里备份要保留的实例；装完新版后可以手动卸载旧版。\n\n### 本版重点：命名与合规\n\n- **程序改名**：改为 **ZPCL Launcher**（短名 `ZPCL`），名称中不再包含上游原名及其缩写（GPLv3 §7(c) 附加条款）。\n- **非官方标注**：启动页、解压页顶栏、设置 → 关于页标注「非官方修改版 · 与 Zalith Launcher 官方无关」。\n- **修改声明**：新增 NOTICE，写明修改范围、名称处理与源码获取方式；关于页可直达源码仓库。\n- 内部标识符 `launcher_name` 未改动，升级不丢设置、实例与登录态。\n\n### 自 1.5.0 起包含的改动\n\n**新增**\n\n- 文件管理器「打开方式」拆分出「导入模组」「导入布局」\n- 插件页支持「从文件选择 APK」安装，不需要存储权限\n- 更新弹窗常驻「从官网下载（若下载缓慢）」\n\n**优化**\n\n- 外观全部交给皮肤插件的 `ui.json`；软玻璃改用真实高斯模糊，支持清晰度档位\n- 弹窗限高并让正文自己滚动，按钮固定在底部\n- 模组 / 整合包默认来源改为 Modrinth\n- 默认下载线程 16 → 32（老用户自动抬升，手动改过的不动）\n- 鼠标指向高亮进入 60ms、离开立即生效，快速移动不再拖尾\n\n**修复**\n\n- 弹窗玻璃马赛克、顶栏深色横线、按钮残留玻璃描边\n- 整合包导出遇 `[` `]`（如 `[宝]`）崩溃、整合包导入报 ENOENT\n- 资源详情点前置资源后返回跳回主页（改为页面栈逐层退回）\n"
+    "markdown": "这是 **ZPCL Launcher** 的 1.5.5 版本。\n\n- 版本号：1.5.5（versionCode 200088）\n- 覆盖安装即可升级，包名未变\n\n### 本版改动\n\n**修复**\n\n- 第三方认证返回 403 时，只对当前角色尝试一次会话恢复；恢复失败就提示重新登录，不再循环重试，也不会切到别的角色\n- 第三方账号与角色切换：同一账号的多个角色按角色切换，也能直接登录其他账号\n- 启动卡在加载页：接回上游 2.8.1 的启动导航，并恢复 PCL 解压页\n\n**构建**\n\n- 没有项目签名文件时退回 Android 默认调试签名，源码与 CI 也能完成编译\n\n官网：https://zpcl.fun\n"
   },
   "bodies": [
     {
       "language": "zh",
-      "markdown": "这是 **ZPCL Launcher** 的 1.5.4 版本。\n\n- 版本号：1.5.4（versionCode 200076）\n- **包名改为 `com.zpcl.launcher`**：这是一个新应用，旧版本（`com.zalith.pcl`）的设置、实例与登录态\n  不会自动迁移。升级前请先在旧版里备份要保留的实例；装完新版后可以手动卸载旧版。\n\n### 本版重点：命名与合规\n\n- **程序改名**：改为 **ZPCL Launcher**（短名 `ZPCL`），名称中不再包含上游原名及其缩写（GPLv3 §7(c) 附加条款）。\n- **非官方标注**：启动页、解压页顶栏、设置 → 关于页标注「非官方修改版 · 与 Zalith Launcher 官方无关」。\n- **修改声明**：新增 NOTICE，写明修改范围、名称处理与源码获取方式；关于页可直达源码仓库。\n- 内部标识符 `launcher_name` 未改动，升级不丢设置、实例与登录态。\n\n### 自 1.5.0 起包含的改动\n\n**新增**\n\n- 文件管理器「打开方式」拆分出「导入模组」「导入布局」\n- 插件页支持「从文件选择 APK」安装，不需要存储权限\n- 更新弹窗常驻「从官网下载（若下载缓慢）」\n\n**优化**\n\n- 外观全部交给皮肤插件的 `ui.json`；软玻璃改用真实高斯模糊，支持清晰度档位\n- 弹窗限高并让正文自己滚动，按钮固定在底部\n- 模组 / 整合包默认来源改为 Modrinth\n- 默认下载线程 16 → 32（老用户自动抬升，手动改过的不动）\n- 鼠标指向高亮进入 60ms、离开立即生效，快速移动不再拖尾\n\n**修复**\n\n- 弹窗玻璃马赛克、顶栏深色横线、按钮残留玻璃描边\n- 整合包导出遇 `[` `]`（如 `[宝]`）崩溃、整合包导入报 ENOENT\n- 资源详情点前置资源后返回跳回主页（改为页面栈逐层退回）\n"
+      "markdown": "这是 **ZPCL Launcher** 的 1.5.5 版本。\n\n- 版本号：1.5.5（versionCode 200088）\n- 覆盖安装即可升级，包名未变\n\n### 本版改动\n\n**修复**\n\n- 第三方认证返回 403 时，只对当前角色尝试一次会话恢复；恢复失败就提示重新登录，不再循环重试，也不会切到别的角色\n- 第三方账号与角色切换：同一账号的多个角色按角色切换，也能直接登录其他账号\n- 启动卡在加载页：接回上游 2.8.1 的启动导航，并恢复 PCL 解压页\n\n**构建**\n\n- 没有项目签名文件时退回 Android 默认调试签名，源码与 CI 也能完成编译\n\n官网：https://zpcl.fun\n"
     },
     {
       "language": "en",
-      "markdown": "This is **ZPCL Launcher** 1.5.4.\n\n- Version: 1.5.4 (versionCode 200076)\n- Package name unchanged (`com.zalith.pcl`); installs over previous builds\n\n### This release: naming and compliance\n\n- **Renamed** to **ZPCL Launcher** (short name `ZPCL`); the name no longer contains the upstream\n  project name or its abbreviation (GPLv3 section 7(c) additional terms).\n- **Unofficial notice** on the splash screen, the unpack screen and Settings - About:\n  \"unofficial modified build, not affiliated with Zalith Launcher\".\n- **Modification notice**: a NOTICE file records what was changed, how the name is handled, and where the\n  source lives; the About page links to the repository.\n- The internal `launcher_name` identifier is untouched, so settings, instances and login state survive the update.\n\n### Changes since 1.5.0\n\n**New**\n\n- Separate \"Import mod\" / \"Import layout\" entries in the file manager\n- \"Pick APK\" plugin install in the plugin page, no storage permission needed\n- A permanent \"Download from the official site\" row in the update dialog\n\n**Improvements**\n\n- All appearance comes from the theme plugin's `ui.json`; soft glass uses a real Gaussian blur with quality tiers\n- Dialogs are height-capped, the body scrolls and the buttons stay pinned\n- Default source for mods / modpacks is now Modrinth\n- Default download threads 16 -> 32 (existing users are raised unless they changed it)\n- Hover highlight: 60 ms in, immediate out, no more trailing rows\n\n**Fixes**\n\n- Glass mosaic in dialogs, dark line under the title bar, residual glass border on buttons\n- Modpack export crash on `[` `]` in folder names, modpack import ENOENT\n- Returning from a required resource jumped to the home page (now a real page stack)\n"
+      "markdown": "This is **ZPCL Launcher** 1.5.5.\n\n- Version: 1.5.5 (versionCode 200088)\n- Installs over the previous build; the package name is unchanged\n\n### Changes\n\n**Fixes**\n\n- Third-party auth 403: recovery is attempted once for the current profile only. If it still fails, the launcher asks you to sign in again instead of retrying in a loop or switching profiles\n- Third-party account and profile switching: profiles of the same account are switched by profile ID, and signing in with another account is supported\n- Splash stuck on loading: the upstream 2.8.1 navigation is wired again and the PCL unpack screen is restored\n\n**Build**\n\n- Falls back to the default Android debug signature when the project keystore is absent, so source builds and CI can compile\n\nOfficial site: https://zpcl.fun\n"
     }
   ]
 }
