@@ -2576,7 +2576,11 @@ internal fun startModpackImport(
     val total = version.platformFileSize().coerceAtLeast(1L)
 
     val downloadTask = Task.runTask(
-        id = "pcl2_modpack_download/${version.platformId()}",
+        // 【id 必须每次唯一】以前固定写 `pcl2_modpack_download/<平台ID>`：
+        // 同一个整合包点第二次下载时，`TaskSystem.submitTask` 发现同 id 任务已存在会直接返回，
+        // 新任务压根没跑；但它的 `onEnded` 会挂到那条旧任务上，旧任务结束时回调一跑，
+        // 去检查这次根本没生成的文件 —— 于是 100% 之后立刻报「整合包不见了」。
+        id = "pcl2_modpack_download/${version.platformId()}/${System.currentTimeMillis()}",
         task = { task ->
             task.updateMessage(androidText("正在下载整合包：${version.platformFileName()}"))
             var done = 0L

@@ -648,15 +648,6 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         vmViewModel.onConfigurationChanged()
-        // 旋转/折叠屏展开后，Surface 未必立刻按新尺寸重建，画面就会保持旧的长宽比
-        // （表现是整幅渲染转了 90°）。这里按当前屏幕尺寸主动刷一次，50ms 去抖在
-        // requestRefreshWindowSize 内部，连续旋转不会打爆。
-        if (vmViewModel.isRunning) {
-            val metrics = resources.displayMetrics
-            val long = maxOf(metrics.widthPixels, metrics.heightPixels)
-            val short = minOf(metrics.widthPixels, metrics.heightPixels)
-            requestRefreshWindowSize(IntSize(long, short))
-        }
     }
 
     /**
@@ -839,6 +830,25 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
         vmViewModel.isRunning = true
 
         withHandler { mIsSurfaceDestroyed = false }
+
+        // 启动后校正一次窗口尺寸。
+        //
+        // 画面歪 90° 的成因：`screenSizeBridge` 第一次给出的尺寸可能还是竖的
+        // （系统尚未把窗口切成横屏时 Compose 已完成一次布局），游戏就按竖尺寸建了
+        // 交换链缓冲区，之后系统把这块竖缓冲旋转 90° 铺满横屏 —— 于是世界和 HUD
+        // 全是歪的，而 Compose 画的控制按钮是正的。
+        // 这里在启动后的几个时间点用**当前屏幕尺寸**重新下发一次，把缓冲区掰正。
+        lifecycleScope.launch(Dispatchers.Main) {
+            listOf(600L, 1600L, 3000L).forEach { delayMillis ->
+                delay(delayMillis)
+                if (!vmViewModel.isRunning) return@launch
+                val metrics = resources.displayMetrics
+                val longSide = maxOf(metrics.widthPixels, metrics.heightPixels)
+                val shortSide = minOf(metrics.widthPixels, metrics.heightPixels)
+                requestRefreshWindowSize(IntSize(longSide, shortSide))
+            }
+        }
+
         lifecycleScope.launch(Dispatchers.Default) {
             val screenSize = vmViewModel.screenSizeBridge.awaitData()
             val currentSize = refreshWindowSize(screenSize = screenSize)
