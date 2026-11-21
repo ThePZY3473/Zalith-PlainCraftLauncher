@@ -290,21 +290,21 @@ fun PclOtherAboutPage() {
                 PclAboutRow(
                     icon = painterResource(R.drawable.img_avatar_ltcat),
                     title = "龙腾猫跃",
-                    info = "Plain Craft Launcher 2 的作者！",
+                    info = "Plain Craft Launcher 2 的作者",
                     buttonText = "打开主页",
                 ) { openLink(context, URL_LTCATT) }
 
                 PclAboutRow(
                     icon = painterResource(R.drawable.img_avatar_movtery),
                     title = "墨北Mov",
-                    info = "Zalith Launcher 2 的作者！",
+                    info = "Zalith Launcher 2 的作者",
                     buttonText = "打开主页",
                 ) { openLink(context, URL_MOVTERY) }
 
                 PclAboutRow(
                     icon = painterResource(R.drawable.img_launcher),
                     title = "Zalith Launcher 2",
-                    info = "${BuildKeys.LAUNCHER_NAME} 的运行内核 · 版本 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_TYPE}",
+                    info = "运行内核 · 版本 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）· ${BuildConfig.BUILD_TYPE}",
                     buttonText = "开源代码",
                 ) { openLink(context, "https://github.com/ZalithLauncher/ZalithLauncher2") }
 
@@ -313,14 +313,14 @@ fun PclOtherAboutPage() {
                 PclAboutRow(
                     icon = painterResource(R.drawable.ic_launcher_logo),
                     title = "源代码与许可",
-                    info = "GPLv3 · 本仓库即与安装包同源的完整源码，可自由获取、修改与再分发",
+                    info = "GPLv3 · 与安装包对应的完整源码，可自由获取、修改与再分发",
                     buttonText = "GitHub",
                 ) { openLink(context, URL_PROJECT) }
 
                 PclAboutRow(
                     icon = painterResource(R.drawable.ic_launcher_logo),
                     title = BuildKeys.LAUNCHER_NAME,
-                    info = "非官方修改版 · 与 Zalith Launcher 官方无关。基于 Zalith Launcher 2 二次开发，界面参考 PCL2。",
+                    info = "非官方修改版，与 Zalith Launcher 官方无隶属关系。基于 Zalith Launcher 2 二次开发，界面版式参考 PCL2。",
                     buttonText = if (checking) "检查中…" else "检查更新",
                 ) {
                     // 检查更新必须**当场给出可见结果**：以前只往左下角推一条提示条，
@@ -443,10 +443,25 @@ fun PclOtherAboutPage() {
                         "Zalith Launcher 2 亦以 GPL-3.0 发布，本界面移植同样遵循该许可。",
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(Modifier.height(10.dp))
+                // 内置的第三方运行时与图形组件：按各自的许可分发，必须能在这里看到
+                PclText(
+                    text = "内置第三方组件（各自适用其许可证）：\n" +
+                        "· MobileGL —— GNU LGPL 3.0，桌面 OpenGL 4.6 实现层（libMobileGL.so）\n" +
+                        "· MobileGlues —— GNU LGPL 2.1，OpenGL 转换层\n" +
+                        "· SimpleFPEWrapper —— GNU LGPL 3.0，固定管线兼容层\n" +
+                        "· GL4ES / Mesa / LWJGL / ANGLE 等，详见第三方组件清单",
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
                     PclButton(text = "许可原文", onClick = { openLink(context, "$URL_PROJECT/blob/main/LICENSE") })
+                    PclButton(text = "第三方组件清单", onClick = { openLink(context, "$URL_PROJECT/blob/main/docs/THIRD_PARTY.md") })
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
                     PclButton(text = "项目仓库", onClick = { openLink(context, URL_PROJECT) })
+                    PclButton(text = "MobileGL 许可", onClick = { openLink(context, "https://github.com/MobileGL-Dev/MobileGL/blob/main/COPYING.LESSER") })
                 }
             }
         }

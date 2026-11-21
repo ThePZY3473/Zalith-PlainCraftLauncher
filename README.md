@@ -1,18 +1,15 @@
 # ZPCL Launcher
 
-面向 **Android 设备** 的 [Minecraft: Java Edition](https://www.minecraft.net/) 启动器。
+ZPCL Launcher 是面向 Android 设备的 Minecraft: Java Edition 启动器。
 
-启动核心沿用 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2) 与
-[PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)，界面按
-[Plain Craft Launcher 2](https://github.com/Hex-Dragon/PCL2)（下称 PCL2）的版式与交互重做，
-使用 **Jetpack Compose** 编写。
+启动核心基于 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2) 与
+[PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)；界面按
+[Plain Craft Launcher 2](https://github.com/Hex-Dragon/PCL2)（下称 PCL2）的版式与交互重新实现，
+使用 Jetpack Compose 编写。
 
-> 当前版本：**1.5.5（versionCode 200088）**，基于上游 Zalith Launcher 2 **2.8.1**
-> 本项目是 Zalith Launcher 2 的**非官方修改版**，与上游官方无关联。
-> 对外名称为 ZPCL Launcher；上游 GPLv3 第 7 条附加条款与当前界面标注位置见 [NOTICE.md](NOTICE.md)。
-
-修改声明、与上游的边界、名称与标识的处理、问题该提给谁，都写在 **[NOTICE.md](NOTICE.md)**。
-本文件只讲这个启动器本身。
+> 当前版本：**1.5.6（versionCode 200089）**，对应上游 Zalith Launcher 2 **2.8.1**。
+> 本项目为 Zalith Launcher 2 的非官方修改版，与上游官方无隶属关系，亦未获其背书。
+> 名称与标识的处理、修改范围、问题反馈渠道见 [NOTICE.md](NOTICE.md)。
 
 ---
 

@@ -24,14 +24,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -40,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.zalith.pcl.R
+import com.zalith.pcl.legal.AgreementStore
 import com.zalith.pcl.setting.launcherMMKV
 import com.zalith.pcl.ui.pcl2.components.PclButton
 import com.zalith.pcl.ui.pcl2.components.PclColorState
@@ -47,26 +53,43 @@ import com.zalith.pcl.ui.pcl2.components.PclText
 import com.zalith.pcl.ui.pcl2.theme.PclDimens
 import com.zalith.pcl.ui.pcl2.theme.PclPalettes
 import com.zalith.pcl.ui.pcl2.theme.PclTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
+import com.zalith.pcl.ui.pcl2.theme.PclTextStyle
 import com.zalith.pcl.ui.pcl2.theme.pclPalette
 import kotlinx.coroutines.delay
 
-/** 条款版本号：改条款内容时把这里的数字加一，用户会重新看到一次。 */
-private const val TERMS_VERSION = 1
-private const val TERMS_KEY = "terms_accepted_version"
+/**
+ * 条款版本不再写死成整数：以 `assets/legal/data.json` 的 `version` 为准，
+ * 改协议内容时只要更新那个字段，用户下次启动就会重新看到并重新确认。
+ */
+private const val LEGACY_TERMS_KEY = "terms_accepted_version"
 
 /** 必须停留的最短时间（秒）。 */
 private const val MIN_READ_SECONDS = 10
 
-/** 已同意的条款版本；没同意过返回 0。 */
-fun pclTermsAcceptedVersion(): Int = runCatching {
-    launcherMMKV().getInt(TERMS_KEY, 0)
-}.getOrDefault(0)
+/** 把老的整数版本记录清掉，避免它一直留在 MMKV 里没有意义。 */
+private fun dropLegacyTermsRecord() {
+    runCatching { launcherMMKV().remove(LEGACY_TERMS_KEY) }
+}
 
-/** 当前版本的条款是否已经同意过。 */
-fun pclTermsAccepted(): Boolean = pclTermsAcceptedVersion() >= TERMS_VERSION
+/** 当前协议是否已经同意过（版本一致即算同意）。 */
+fun pclTermsAccepted(context: android.content.Context): Boolean {
+    val version = AgreementStore.load(context)?.version
+    // 清单读不到时不拦人，避免安装包异常时把用户挡在门外
+    if (version == null) return true
+    dropLegacyTermsRecord()
+    return AgreementStore.acceptedVersion(context) == version
+}
 
-private fun markTermsAccepted() {
-    runCatching { launcherMMKV().putInt(TERMS_KEY, TERMS_VERSION) }
+private fun markTermsAccepted(context: android.content.Context) {
+    val version = AgreementStore.load(context)?.version ?: return
+    AgreementStore.markAccepted(context, version)
 }
 
 /**
@@ -90,7 +113,11 @@ fun PclTermsScreen(onAccept: () -> Unit) {
 private fun PclTermsContent(onAccept: () -> Unit) {
     val p = pclPalette
     val context = LocalContext.current
-    val scroll = rememberScrollState()
+    // 两份文件：使用条款 + 隐私政策（清单来自 assets/legal/data.json）
+    val docs = remember { AgreementStore.docsForLocale(context) }
+    var index by remember { mutableIntStateOf(0) }
+    val scrolls = remember { mutableMapOf<Int, ScrollState>() }
+    val readDocs = remember { mutableStateMapOf<Int, Boolean>() }
 
     var startedAt by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     var now by remember { mutableLongStateOf(startedAt) }
@@ -105,11 +132,15 @@ private fun PclTermsContent(onAccept: () -> Unit) {
 
     val waitedSeconds = ((now - startedAt) / 1000L).toInt()
     val remainingSeconds = (MIN_READ_SECONDS - waitedSeconds).coerceAtLeast(0)
+    val scroll = scrolls.getOrPut(index) { ScrollState(0) }
     // 内容不足一屏时 maxValue 就是 0，此时视为「已读到结尾」。
-    val readToEnd by remember {
-        derivedStateOf { scroll.maxValue == 0 || scroll.value >= scroll.maxValue - 4 }
+    LaunchedEffect(scroll, index) {
+        snapshotFlow { scroll.value to scroll.maxValue }.collect { (value, max) ->
+            if (max == 0 || value >= max - 4) readDocs[index] = true
+        }
     }
-    val canAccept = readToEnd && remainingSeconds == 0
+    val allRead = docs.isNotEmpty() && docs.indices.all { readDocs[it] == true }
+    val canAccept = allRead && remainingSeconds == 0
 
     BackHandler(enabled = true) {
         // 未同意前不允许返回键退出；要离开请用底部「退出」按钮。
@@ -141,14 +172,32 @@ private fun PclTermsContent(onAccept: () -> Unit) {
                 )
                 PclText(text = "ZPCL Launcher", color = Color.White, fontSize = 16, bold = true)
                 PclText(
-                    text = "使用条款与项目说明",
+                    text = "使用条款与隐私政策",
                     color = Color.White.copy(alpha = 0.72f),
                     fontSize = 12,
                 )
             }
         }
 
-        // ---- 正文（唯一可滚动区域）
+        // ---- 文档切换（通常就是「使用条款」「隐私政策」两份）
+        if (docs.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 22.dp, end = 22.dp, top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                docs.forEachIndexed { i, doc ->
+                    PclButton(
+                        text = doc.title,
+                        enabled = i != index,
+                        onClick = { index = i },
+                    )
+                }
+            }
+        }
+
+        // ---- 正文（唯一可滚动区域，按当前文档滚动）
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -156,44 +205,18 @@ private fun PclTermsContent(onAccept: () -> Unit) {
                 .verticalScroll(scroll)
                 .padding(horizontal = 22.dp, vertical = 14.dp),
         ) {
-            PclSection("一、项目性质")
-            PclBody(
-                "本程序为 Zalith Launcher 2 的非官方修改版，依据 GNU 通用公共许可证第 3 版（GPLv3）发布。" +
-                    "与 Zalith Launcher 官方及其作者无隶属关系，亦未获其背书。启动核心沿用 Zalith Launcher 2，" +
-                    "界面版式参考 Plain Craft Launcher 2。本程序不含 Minecraft 游戏本体。",
-            )
-
-            PclSection("二、使用条件")
-            PclBody("使用者须自行持有合法的 Minecraft 账号，并自行准备运行所需的存储空间与网络环境。")
-            PclBody("下载功能依赖 Modrinth、CurseForge、BMCLAPI 等第三方服务；第三方服务不可用时相关功能受限。")
-
-            PclSection("三、不提供的内容")
-            PclBody("不提供游戏本体、账号、Mod、整合包及其他受版权保护的内容。")
-            PclBody("不对第三方资源的可用性、兼容性与安全性作出保证，亦不提供账号找回、申诉或商业支持。")
-
-            PclSection("四、数据与隐私")
-            PclBody("设置、实例与账号凭据保存在本机应用私有目录，不上传至本项目作者。")
-            PclBody("下载与更新请求直接发往对应第三方服务，其数据处理适用该服务方的隐私政策。")
-            PclBody("卸载应用将清除本地设置与实例记录，需要保留的存档请自行备份。")
-
-            PclSection("五、许可与源代码")
-            PclBody(
-                "本程序依据 GPLv3 发布，许可全文见「关于」页的「许可原文」。依据 GPLv3 第 6 条，" +
-                    "与安装包对应的完整源代码可从「关于」页的「源代码与许可」取得。",
-            )
-            PclBody(
-                "修改与再分发须继续遵循 GPLv3，并遵守上游依 GPLv3 第 7 条附加的名称与标注要求。",
-            )
-
-            PclSection("六、免责声明")
-            PclBody(
-                "本程序按「现状」提供，不附带任何明示或默示担保。在法律允许的最大范围内，" +
-                    "作者与贡献者不对使用或无法使用本程序所造成的任何损失承担责任。",
-            )
-            PclBody("点击「同意」即表示已阅读并接受上述全部内容；如不同意，请退出并卸载本程序。")
-
+            val doc = docs.getOrNull(index)
+            if (doc == null) {
+                PclBody("协议内容读取失败，请检查安装包是否完整。")
+            } else {
+                LegalMarkdown(doc.body)
+            }
             Spacer(modifier = Modifier.height(20.dp))
-            PclText(text = "—— 以上为全部内容 ——", color = p.gray3, fontSize = 12)
+            PclText(
+                text = if (doc == null) "" else "—— 以上为全部内容 ——",
+                color = p.gray3,
+                fontSize = 12,
+            )
             Spacer(modifier = Modifier.height(10.dp))
         }
 
@@ -208,8 +231,9 @@ private fun PclTermsContent(onAccept: () -> Unit) {
         ) {
             PclText(
                 text = when {
+                    docs.isEmpty() -> "协议内容不可用，可直接继续"
                     remainingSeconds > 0 -> "请阅读条款，还需 $remainingSeconds 秒"
-                    !readToEnd -> "请滚动到条款末尾"
+                    !allRead -> "还有 ${docs.indices.count { readDocs[it] != true }} 份未读完"
                     else -> "已阅读完毕，可以继续"
                 },
                 color = if (canAccept) p.gray2 else p.gray3,
@@ -225,7 +249,7 @@ private fun PclTermsContent(onAccept: () -> Unit) {
                 text = "我已阅读并同意",
                 enabled = canAccept,
                 onClick = {
-                    markTermsAccepted()
+                    markTermsAccepted(context)
                     onAccept()
                 },
             )
@@ -249,6 +273,96 @@ private fun PclBody(text: String) {
         text = text.replace("**", ""),
         color = p.color1,
         fontSize = 13,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp),
+    )
+}
+
+/**
+ * 极简 Markdown 渲染：只认标题、二级标题、列表项和普通段落。
+ *
+ * 协议原文放在 `assets/legal/` 下的 .md 文件里，没必要为了几十行文字引入完整的 Markdown 库：
+ * 这里把 `#`/`##`/`-` 和 `**加粗**` 处理掉，其余按段落原样显示。
+ */
+@Composable
+private fun LegalMarkdown(markdown: String) {
+    val lines = markdown.lines()
+    lines.forEach { raw ->
+        val line = raw.trimEnd()
+        when {
+            line.isBlank() -> Unit
+            // 文档标题：# 开头的第一行，用大一号的字显示出来
+            line.startsWith("# ") -> PclDocTitle(line.removePrefix("# ").trim())
+            line.startsWith("## ") -> PclSection(line.removePrefix("## ").trim())
+            line.startsWith("- ") -> PclRichBody("· " + softWrapUrls(line.removePrefix("- ").trim()))
+            else -> PclRichBody(softWrapUrls(line))
+        }
+    }
+}
+
+/**
+ * 给长链接插入零宽空格，让它能在任意位置折行。
+ *
+ * Compose 的文本按「词」折行，一串没有空格的 URL 会被当成一个超长单词直接顶出屏幕
+ * （协议里的 GitHub 链接就是这样溢出的）。零宽空格不占宽度，复制出来也不影响阅读。
+ */
+private fun softWrapUrls(text: String): String {
+    val url = Regex("""https?://\S+""")
+    return url.replace(text) { match ->
+        val value = match.value
+        if (value.length <= 24) value else value.chunked(24).joinToString("\u200B")
+    }
+}
+
+/** 协议文档的大标题。 */
+@Composable
+private fun PclDocTitle(text: String) {
+    val p = pclPalette
+    PclText(
+        text = text,
+        color = p.color1,
+        fontSize = 17,
+        bold = true,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+    )
+}
+
+/**
+ * 支持 `**加粗**` 的正文。
+ *
+ * 协议里的「**项目主体：**」「**版本：**」这类标签在原文档里是加粗的，
+ * 直接当纯文本渲染会跟正文混成一片；这里按段内样式渲染，标题和标签才立得住。
+ */
+@Composable
+private fun PclRichBody(text: String) {
+    val p = pclPalette
+    val annotated = buildAnnotatedString {
+        var index = 0
+        while (index < text.length) {
+            val start = text.indexOf("**", index)
+            if (start < 0) {
+                append(text.substring(index))
+                break
+            }
+            val end = text.indexOf("**", start + 2)
+            if (end < 0) {
+                append(text.substring(index))
+                break
+            }
+            append(text.substring(index, start))
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                append(text.substring(start + 2, end))
+            }
+            index = end + 2
+        }
+    }
+    Text(
+        text = annotated,
+        style = PclTextStyle.base(p).copy(
+            color = p.color1,
+            fontSize = 13.sp,
+            lineHeight = PclTextStyle.lineHeight(13),
+        ),
+        overflow = TextOverflow.Visible,
         modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp),
     )
 }
