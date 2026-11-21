@@ -57,6 +57,7 @@ import com.zalith.pcl.game.renderer.RendererCompat
 import com.zalith.pcl.game.renderer.Renderers
 import com.zalith.pcl.game.renderer.renderers.GL4ESRenderer
 import com.zalith.pcl.game.renderer.renderers.NGGL4ESRenderer
+import com.zalith.pcl.game.sdl.SdlBridge
 import com.zalith.pcl.game.support.touch_controller.ControllerProxy
 import com.zalith.pcl.game.version.installed.Version
 import com.zalith.pcl.game.version.installed.VersionInfoParser
@@ -259,7 +260,22 @@ class GameLauncher(
         // 不补这一步 SDL 会拒绝初始化（Application didn't initialize properly）；
         // 另外 Cleanroom 只调 SDL_InitSubSystem，从不调 SDL_Init，
         // 线程/TLS 系统未初始化会让 SDL_GetCurrentThread() 返回 NULL 并崩溃。
+        //
+        // 上游是在游戏 JVM 里靠 sdl_hook 拦截 SDL_InitSubSystem 才走到 JNI 初始化，
+        // 本机 hook 没生效（日志里没有 "ZalithLauncher: loading SDL3"），
+        // 所以这里由启动器主动补做同样的事：System.loadLibrary 触发 JNI_OnLoad，
+        // 设置 SDL 的 Android 侧 JNI 环境。
         ZLBridge.dlopen("${PathManager.DIR_NATIVE_LIB}/libSDL3.so")
+        runCatching {
+            System.loadLibrary("SDL3")
+            SdlBridge.setupJNI()
+            SdlBridge.sdlEnabled = true
+            Logger.info(TAG, "SDL3 已加载，Android JNI 环境已就绪")
+        }.onFailure {
+            Logger.error(TAG, "SDL3 JNI 初始化失败", it)
+        }
+
+        Logger.info(TAG, "调用 SDL_SetMainReady + SDL_Init(0)")
         val sdlReady = ZLBridge.sdlSetMainReady()
         Logger.info(TAG, "SDL 核心初始化（SDL_SetMainReady + SDL_Init(0)）: ${if (sdlReady) "成功" else "失败"}")
     }
