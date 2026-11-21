@@ -180,7 +180,4 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := locale_shim
 LOCAL_SRC_FILES := locale_shim.c
 LOCAL_LDLIBS := -llog
-# 预编译库按版本引用 nl_langinfo（LIBC_O），shim 必须导出同名版本符号，
-# 否则 Android 7 的 linker 仍会报 cannot locate symbol。
-LOCAL_LDFLAGS += -Wl,--version-script=$(LOCAL_PATH)/locale_shim.map
 include $(BUILD_SHARED_LIBRARY)

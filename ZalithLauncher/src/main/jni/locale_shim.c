@@ -56,21 +56,14 @@ void *uselocale(void *locale) {
     return old;
 }
 
-char *shim_nl_langinfo_impl(nl_item item) {
+char *nl_langinfo(nl_item item) {
     // 绝大多数调用只关心 CODESET，返回 UTF-8 即可；其余给空串。
     return item == SHIM_CODESET ? (char *) "UTF-8" : (char *) "";
 }
 
-// 同时导出两个版本：
-//  - nl_langinfo@@LIBC 作为默认版本，让 dlsym(RTLD_DEFAULT) 和未版本化引用能找到；
-//  - nl_langinfo@LIBC_O 非默认版本，匹配 libng_gl4es.so 的带版本引用。
-// 只导出其中一种时，bionic 的版本匹配/默认版本查找总有一边失败。
-__asm__(".symver shim_nl_langinfo_impl,nl_langinfo@@LIBC");
-__asm__(".symver shim_nl_langinfo_impl,nl_langinfo@LIBC_O");
-
 char *nl_langinfo_l(nl_item item, void *locale) {
     (void) locale;
-    return shim_nl_langinfo_impl(item);
+    return nl_langinfo(item);
 }
 
 __attribute__((constructor)) static void shim_loaded(void) {
