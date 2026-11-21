@@ -161,6 +161,8 @@ abstract class Launcher(
             val reason = ZLBridge.getLastDlopenError()
             Logger.error("Launcher", "liblocale_shim.so 加载失败：$reason")
             LoggerBridge.appendInfo("liblocale_shim.so 加载失败，Android 8.0 以下的渲染器/音频库可能无法使用：$reason")
+        } else {
+            Logger.info("Launcher", "liblocale_shim.so 已加载（RTLD_GLOBAL）")
         }
 
         LoggerBridge.appendTitle("DLOPEN Java Runtime")

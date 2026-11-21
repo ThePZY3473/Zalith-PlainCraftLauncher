@@ -61,9 +61,11 @@ char *shim_nl_langinfo_impl(nl_item item) {
     return item == SHIM_CODESET ? (char *) "UTF-8" : (char *) "";
 }
 
-// 预编译库引用的是非默认版本 nl_langinfo@LIBC_O，用 .symver 精确导出该版本。
-// 只靠 --version-script 会生成默认版本 @@LIBC_O，部分 bionic linker 版本匹配
-// 逻辑更严格时仍会判为不匹配。
+// 同时导出两个版本：
+//  - nl_langinfo@@LIBC 作为默认版本，让 dlsym(RTLD_DEFAULT) 和未版本化引用能找到；
+//  - nl_langinfo@LIBC_O 非默认版本，匹配 libng_gl4es.so 的带版本引用。
+// 只导出其中一种时，bionic 的版本匹配/默认版本查找总有一边失败。
+__asm__(".symver shim_nl_langinfo_impl,nl_langinfo@@LIBC");
 __asm__(".symver shim_nl_langinfo_impl,nl_langinfo@LIBC_O");
 
 char *nl_langinfo_l(nl_item item, void *locale) {
