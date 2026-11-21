@@ -172,7 +172,6 @@ import com.zalith.pcl.ui.androidText
 import com.zalith.pcl.ui.screens.content.download.assets.elements.AssetsPage
 import com.zalith.pcl.ui.screens.content.download.assets.elements.initAll
 import com.zalith.pcl.ui.toAndroidString
-import com.zalith.pcl.game.download.assets.platform.mcim.mapMCIMMirrorUrls
 import com.zalith.pcl.utils.network.downloadFile
 import com.zalith.pcl.utils.network.downloadFileFromSources
 import com.zalith.pcl.utils.network.withSpeedReport
@@ -2601,10 +2600,12 @@ internal fun startModpackImport(
                     onSpeedReport = { bytes -> task.updateSpeed(bytes) },
                     onClear = { task.clearSpeed() },
                 ) { report ->
-                    // 走候选源列表（官方 + MCIM 镜像）：分段下载会把不同段摊到不同源上，
-                    // 哪个源慢只影响它那几段，而不是把整个包拖住 —— PCL 的源池就是这个思路
+                    // 【只走官方源】Modrinth / CurseForge 的 CDN 在国内本身就能跑满
+                    // （原版同一个包实测 5 MB/s+），而 MCIM 中转是按连接限速的：之前把
+                    // 「镜像 + 官方」一起丢进分段池，慢的那一半连接把整体拖到几百 KB/s。
+                    // 需要中转的用户可在「设置 → 下载 → 资源平台下载源」单独切镜像。
                     downloadFileFromSources(
-                        urls = version.platformDownloadUrl().mapMCIMMirrorUrls(),
+                        urls = listOf(version.platformDownloadUrl()),
                         outputFile = output,
                         sha1 = version.platformSha1(),
                         // 有了大小才能分段并行：没有它，一个几百 MB 的包只能单连接慢慢爬
