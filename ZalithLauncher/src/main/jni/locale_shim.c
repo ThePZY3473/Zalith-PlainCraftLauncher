@@ -67,8 +67,8 @@ char *nl_langinfo_l(nl_item item, void *locale) {
 }
 
 __attribute__((constructor)) static void shim_loaded(void) {
-    __android_log_print(ANDROID_LOG_INFO, "locale_shim",
-                        "liblocale_shim.so loaded (pid=%d)", (int) getpid());
+    __android_log_print(ANDROID_LOG_INFO, "shm",
+                        "libshm.so loaded (pid=%d)", (int) getpid());
 }
 
 /* ------------------------------------------------------------------------- */

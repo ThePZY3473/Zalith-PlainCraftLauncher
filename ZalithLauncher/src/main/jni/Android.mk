@@ -177,7 +177,7 @@ LOCAL_PATH := $(HERE_PATH)
 # "cannot locate symbol" 失败。这里编出一个 shim，由 Java 层以 RTLD_GLOBAL
 # 预先加载。
 include $(CLEAR_VARS)
-LOCAL_MODULE := locale_shim
+LOCAL_MODULE := shm
 LOCAL_SRC_FILES := locale_shim.c
 LOCAL_LDLIBS := -llog
 include $(BUILD_SHARED_LIBRARY)

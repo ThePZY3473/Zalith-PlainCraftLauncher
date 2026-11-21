@@ -112,7 +112,7 @@ JNIEXPORT jboolean JNICALL Java_com_zalith_pcl_bridge_ZLBridge_dlopen(JNIEnv *en
 	void* handle = dlopen(nameUtf, RTLD_GLOBAL | RTLD_LAZY);
 	if (!handle) {
 		const char *err = dlerror();
-		// RTLD_DEFAULT 查 nl_langinfo 可以判断 locale_shim 的符号是否在全局作用域：
+		// RTLD_DEFAULT 查 nl_langinfo 可以判断 libshm 的符号是否在全局作用域：
 		// 找不到说明 shim 没加载成功，或版本不匹配。
 		void *langinfo = dlsym(RTLD_DEFAULT, "nl_langinfo");
 		snprintf(last_dlopen_error, sizeof(last_dlopen_error),
