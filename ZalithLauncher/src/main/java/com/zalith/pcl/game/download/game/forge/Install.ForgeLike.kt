@@ -167,7 +167,7 @@ private suspend fun installNewForgeHMCLWay(
                             baseDir = tempMinecraftDir,
                             literal = client.asString,
                             plainConverter = { str ->
-                                val dest: Path = Files.createTempFile(tempDir.toPath(), null, null)
+                                val dest: Path = Files.createTempFile(Paths.get(tempDir.path), null, null)
                                 val item = str
                                     .removePrefix("\\")
                                     .removePrefix("/")
@@ -337,7 +337,7 @@ private suspend fun runProcessors(
         }
 
         val anyMissing = outputs.any { (key, expectedHash) ->
-            val artifact = tempMinecraftDir.toPath().resolve(key)
+            val artifact = Paths.get(tempMinecraftDir.path).resolve(key)
             if (!Files.exists(artifact)) return@any true
 
             val actualHash = Files.newInputStream(artifact).use { stream ->
@@ -352,7 +352,7 @@ private suspend fun runProcessors(
 
         if (outputs.isNotEmpty() && !anyMissing) return@mapNotNull null
 
-        val jarPath = tempMinecraftDir.toPath().resolve("libraries").resolve(processor.getJar().toPath())
+        val jarPath = Paths.get(tempMinecraftDir.path).resolve("libraries").resolve(processor.getJar().toPath())
         require(Files.isRegularFile(jarPath)) { "Game processor file not found: $jarPath" }
 
         val mainClass = JarFile(jarPath.toFile()).use {
@@ -361,7 +361,7 @@ private suspend fun runProcessors(
             ?: throw Exception("Game processor jar missing Main-Class: $jarPath")
 
         val classpath = processor.getClasspath().map { lib ->
-            tempMinecraftDir.toPath().resolve("libraries").resolve(lib.toPath()).also { path ->
+            Paths.get(tempMinecraftDir.path).resolve("libraries").resolve(lib.toPath()).also { path ->
                 require(Files.isRegularFile(path)) { "Missing dependency: $path" }
             }.toString()
         } + jarPath.toString()

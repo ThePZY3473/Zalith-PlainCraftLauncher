@@ -44,7 +44,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.charset.StandardCharsets
-import java.util.Base64
+import org.apache.commons.codec.binary.Base64
 
 @Serializable
 data class StatusResponse(
@@ -98,7 +98,7 @@ class Favicon(
         override val descriptor: SerialDescriptor = delegateSerializer.descriptor
 
         override fun serialize(encoder: Encoder, value: Favicon) {
-            val base64 = Base64.getEncoder().encode(value.icon)
+            val base64 = Base64.encodeBase64(value.icon)
             val base64String = String(base64, StandardCharsets.UTF_8)
             encoder.encodeString(ICON_BYTE_PREFIX + base64String)
         }
@@ -108,7 +108,7 @@ class Favicon(
             //Minecraft 要求必须以这个格式进行解析
             require(string.startsWith(ICON_BYTE_PREFIX))
             val base64 = string.substring(ICON_BYTE_PREFIX.length).replace("\n", "")
-            val icon = Base64.getDecoder().decode(base64.toByteArray())
+            val icon = Base64.decodeBase64(base64.toByteArray())
             return Favicon(icon)
         }
     }

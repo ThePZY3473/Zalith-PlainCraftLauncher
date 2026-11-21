@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -274,7 +275,7 @@ class TerracottaViewModel(
                                     } else {
                                         val vpnIntent = Intent(activity, TerracottaVPNService::class.java)
                                             .setAction(TerracottaVPNService.ACTION_START)
-                                        activity.startForegroundService(vpnIntent)
+                                        ContextCompat.startForegroundService(activity, vpnIntent)
                                     }
                                 }.onFailure {
                                     Logger.warning(TAG_TERRACOTTA_VM, "Cannot request the VPN service", it)

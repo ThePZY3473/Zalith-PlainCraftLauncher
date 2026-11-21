@@ -34,6 +34,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.Executors
 
@@ -299,13 +300,13 @@ class VersionRendererConfigStore @WorkerThread constructor(
             }
             runCatching {
                 Files.move(
-                    tmpFile.toPath(),
-                    configFile.toPath(),
+                    Paths.get(tmpFile.path),
+                    Paths.get(configFile.path),
                     StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.ATOMIC_MOVE
                 )
             }.getOrElse {
-                Files.move(tmpFile.toPath(), configFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                Files.move(Paths.get(tmpFile.path), Paths.get(configFile.path), StandardCopyOption.REPLACE_EXISTING)
             }
             true
         }.onFailure {

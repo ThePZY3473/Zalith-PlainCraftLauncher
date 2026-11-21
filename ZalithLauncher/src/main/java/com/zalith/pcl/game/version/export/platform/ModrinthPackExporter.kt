@@ -45,6 +45,7 @@ import kotlinx.coroutines.withContext
 import org.jackhuang.hmcl.util.DigestUtils
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Paths
 
 private const val TAG = "ModrinthPackExporter"
 
@@ -157,7 +158,7 @@ class ModrinthPackExporter: AbstractExporter(
                         onProgress(file)
 
                         val inManifest = runCatching {
-                            val path = file.toPath()
+                            val path = Paths.get(file.path)
 
                             val sha1 = DigestUtils.digestToString("SHA-1", path)
                             val sha512 = DigestUtils.digestToString("SHA-512", path)

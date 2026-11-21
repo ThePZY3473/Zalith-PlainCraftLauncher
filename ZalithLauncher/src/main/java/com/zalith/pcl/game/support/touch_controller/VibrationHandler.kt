@@ -18,7 +18,6 @@
 
 package com.zalith.pcl.game.support.touch_controller
 
-import android.annotation.SuppressLint
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -52,26 +51,28 @@ class VibrationHandler(
     }
 
     companion object {
-        @SuppressLint("NewApi")
         fun vibrate(
             vibrator: Vibrator,
             vibrateDuration: Int?,
             vibrateKind: VibrateKind?,
         ) {
             runCatching {
+                val duration = vibrateDuration?.coerceAtMost(500)?.coerceAtLeast(80)?.toLong() ?: 100L
+                // Android 8.0 以下没有 VibrationEffect（API 26 才加入），只能退回旧的毫秒接口
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                    vibrator.vibrate(duration)
+                    return@runCatching
+                }
                 val effectKind = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                     VibrateKind.ONE_SHOT
                 } else {
                     vibrateKind
                 }
                 val effect = when (effectKind) {
-                    VibrateKind.ONE_SHOT, null -> {
-                        val duration = vibrateDuration?.coerceAtMost(500)?.coerceAtLeast(80)?.toLong()
-                        VibrationEffect.createOneShot(
-                            duration ?: 100L,
-                            VibrationEffect.DEFAULT_AMPLITUDE
-                        )
-                    }
+                    VibrateKind.ONE_SHOT, null -> VibrationEffect.createOneShot(
+                        duration,
+                        VibrationEffect.DEFAULT_AMPLITUDE
+                    )
 
                     VibrateKind.CLICK -> VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
                     VibrateKind.DOUBLE_CLICK -> VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)

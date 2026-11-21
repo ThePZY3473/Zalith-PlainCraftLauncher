@@ -41,7 +41,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.Base64
+import org.apache.commons.codec.binary.Base64
 
 private const val TAG = "ServerCardManager"
 
@@ -71,7 +71,7 @@ private data class ServerCardRecordDto(
         cardId = cardId,
         name = name,
         icon = icon?.let { base64 ->
-            runCatching { Base64.getDecoder().decode(base64) }.getOrNull()
+            runCatching { Base64.decodeBase64(base64) }.getOrNull()
         },
         quickLaunchEnabled = quickLaunchEnabled,
         versionMode = if (versionMode == MODE_SPECIFIC) {
@@ -91,7 +91,7 @@ private data class ServerCardRecordDto(
         fun fromRecord(record: ServerCardRecord) = ServerCardRecordDto(
             cardId = record.cardId,
             name = record.name,
-            icon = record.icon?.let { Base64.getEncoder().encodeToString(it) },
+            icon = record.icon?.let { Base64.encodeBase64String(it) },
             quickLaunchEnabled = record.quickLaunchEnabled,
             versionMode = if (record.versionMode == ServerCardVersionMode.SPECIFIC) {
                 MODE_SPECIFIC

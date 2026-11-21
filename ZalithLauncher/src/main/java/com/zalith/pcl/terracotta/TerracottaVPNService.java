@@ -221,7 +221,14 @@ public class TerracottaVPNService extends VpnService {
         }
 
         Notification.Builder builder;
-        builder = new Notification.Builder(this, NotificationChannelData.TERRACOTTA_VPN_CHANNEL.getChannelId());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder = new Notification.Builder(this, NotificationChannelData.TERRACOTTA_VPN_CHANNEL.getChannelId());
+        } else {
+            // Android 8.0 以下没有通知渠道，用旧的优先级字段表达“低打扰”
+            builder = new Notification.Builder(this);
+            builder.setPriority(Notification.PRIORITY_LOW);
+            builder.setDefaults(Notification.DEFAULT_LIGHTS);
+        }
 
         Intent deleteIntent = new Intent(this, TerracottaVPNService.class)
                 .setAction(ACTION_REPOST)

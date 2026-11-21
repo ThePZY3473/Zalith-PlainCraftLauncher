@@ -1,7 +1,7 @@
 [versions]
 agp = "9.3.0"
 targetSdk = "34"
-minSdk = "26"
+minSdk = "24"
 #noinspection GradleDependency,NewerVersionAvailable
 bytehook = "1.0.10"
 coilCompose = "3.6.2"
@@ -62,7 +62,11 @@ jetbrains-annotations = { module = "org.jetbrains:annotations", version = "26.0.
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3Exoplayer" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3Exoplayer" }
 buildkeys = { module = "com.github.MovTery.BuildKeys:core", version.ref = "buildKeys" }
-desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+# minSdk 24 下 java.nio.file 不存在（API 26 才进入 Android），
+# 必须用 nio 变体才能把 Files / Path / Paths 反糖化到低版本。
+# 别名不能写成 desugar-jdk-libs-nio，否则会和 desugar-jdk-libs 前缀冲突
+# （生成访问器时 libs.desugar.jdk.libs 会产生歧义）。
+desugar-nio = { module = "com.android.tools:desugar_jdk_libs_nio", version.ref = "desugarJdkLibs" }
 editor = { module = "io.github.rosemoe:editor" }
 editor-bom = { module = "io.github.rosemoe:editor-bom", version.ref = "editorBom" }
 editor-language-textmate = { module = "io.github.rosemoe:language-textmate" }

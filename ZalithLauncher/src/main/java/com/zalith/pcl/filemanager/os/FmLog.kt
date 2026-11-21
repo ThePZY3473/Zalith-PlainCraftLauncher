@@ -29,6 +29,7 @@ import java.io.File
 import java.io.PrintWriter
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -75,7 +76,7 @@ object FmLog {
                 if (logsDir != null) {
                     try {
                         val dir = logsDir.resolve(SUB_DIR).toFile()
-                        Files.createDirectories(dir.toPath())
+                        Files.createDirectories(Paths.get(dir.path))
                         val writer = PrintWriter(createLogFile(dir).writer())
                         // 先建新文件再清理，保证清理时总数准确
                         cleanupOldLogs(dir, keepFiles)
@@ -202,7 +203,7 @@ object FmLog {
         if (files.size <= maxFiles) return
         files.drop(maxFiles).forEach { file ->
             runCatching {
-                Files.deleteIfExists(file.toPath())
+                Files.deleteIfExists(Paths.get(file.path))
             }
         }
     }

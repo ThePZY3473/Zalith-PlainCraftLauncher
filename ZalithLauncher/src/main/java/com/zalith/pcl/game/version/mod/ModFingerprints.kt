@@ -25,6 +25,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
@@ -84,7 +85,7 @@ suspend fun computeModFingerprints(file: File): ModFingerprints = withContext(Di
     val digest = MessageDigest.getInstance("SHA-1")
     var filteredLength = 0
 
-    Files.newInputStream(file.toPath()).use { stream ->
+    Files.newInputStream(Paths.get(file.path)).use { stream ->
         val buffer = ByteArray(8192)
         var bytesRead: Int
         while (stream.read(buffer).also { bytesRead = it } != -1) {

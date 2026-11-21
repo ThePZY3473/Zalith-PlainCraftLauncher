@@ -29,6 +29,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 
 private const val TAG = "UnpackSingleTask"
@@ -172,11 +173,11 @@ abstract class UnpackSingleTask(
 
     private fun movePath(source: File, target: File) {
         try {
-            Files.move(source.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            Files.move(Paths.get(source.path), Paths.get(target.path), StandardCopyOption.ATOMIC_MOVE)
         } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(source.toPath(), target.toPath())
+            Files.move(Paths.get(source.path), Paths.get(target.path))
         } catch (_: UnsupportedOperationException) {
-            Files.move(source.toPath(), target.toPath())
+            Files.move(Paths.get(source.path), Paths.get(target.path))
         }
     }
 

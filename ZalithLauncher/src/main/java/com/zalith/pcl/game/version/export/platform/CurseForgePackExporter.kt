@@ -18,6 +18,7 @@
 
 package com.zalith.pcl.game.version.export.platform
 
+import java.nio.file.Paths
 import android.content.Context
 import com.zalith.pcl.R
 import com.zalith.pcl.coroutine.TitledTask
@@ -155,7 +156,7 @@ class CurseForgePackExporter: AbstractExporter(
                         if (file.isDisabled()) return@forEach
 
                         runCatching {
-                            val path = file.toPath()
+                            val path = Paths.get(file.path)
 
                             val modFile = mirroredPlatformSearcher(
                                 searchers = mirroredCurseForgeSource()

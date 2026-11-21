@@ -26,6 +26,7 @@
 - [版本与发布](#版本与发布)
 - [已知限制](#已知限制)
 - [许可与致谢](#许可与致谢)
+- [关于本fork](#关于本fork)
 
 ---
 
@@ -91,7 +92,7 @@
 ### 环境
 
 - **JDK 17**（`JAVA_HOME` 指向 JDK 17；JDK 8 会在 Gradle 阶段直接失败）
-- Android SDK：`minSdk 26`、`targetSdk 34`，`compileSdk` 见
+- Android SDK：`minSdk 24`、`targetSdk 34`，`compileSdk` 见
   [`ZalithLauncher/build.gradle.kts`](ZalithLauncher/build.gradle.kts)
 - 首次构建需要联网拉依赖
 
@@ -161,7 +162,7 @@ export JAVA_HOME=/path/to/jdk17
 
 ## 版本与发布
 
-安装包以 **GitHub Release 附件**的形式发布，每个 Release 的正文注明它对应的源码 tag；官网 <https://zpcl.fun> 是对外的下载入口，`url_home` 也指向它。仓库仍跟踪部分构建所用的预编译依赖；它们不是启动器安装包，也不是源码，其来源与许可见 [第三方组件清单](docs/THIRD_PARTY.md)。
+本仓库 Releases 不挂 APK ，可以在 Action 里找到 APK 。
 
 **关于 CI：** 推送触发的 [构建工作流](.github/workflows/push_ci.yml) 只做 Debug 编译校验，不向 Debug 构建注入正版登录或 CurseForge 配置，也不上传 APK 产物。只有以 `Release` 变体调用时才使用仓库 Secrets；这类构建由维护者自己发起，不构成公开下载渠道。
 
@@ -177,9 +178,9 @@ export JAVA_HOME=/path/to/jdk17
 
 ## 已知限制
 
-- 仅支持 Android（`minSdk 26`）；iOS / 桌面端不在范围内
-- CurseForge 官方接口需要 `x-api-key`，未内置时只能使用 Modrinth 或镜像
-- 开发线默认未配置微软登录 Client ID，离线和第三方认证不受影响。
+- 仅支持 Android（`minSdk 24`）；iOS / 桌面端不在范围内
+- CurseForge 官方接口需要 `x-api-key`，未内置时只能使用 Modrinth 或镜像（现在没有hh）
+- 开发线默认未配置微软登录 Client ID，离线和第三方认证不受影响（现在没有hh）（当然可以用账号管理模组进行替代）。
 - 皮肤插件同一时间只生效一个；多个一起启用会互相覆盖外观
 - 插件升级后必须让插件 APK 的 `versionCode` 递增，否则启动器不会重新解包（界面会停留在旧配置）
 
@@ -198,3 +199,16 @@ export JAVA_HOME=/path/to/jdk17
 感谢 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2)、
 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)、
 [PCL2](https://github.com/Hex-Dragon/PCL2) 以及所有上游依赖的作者。
+
+---
+
+## 关于本fork
+
+*(虽然好像没人看)*
+
+- 本人（ThePZY3473/CutePZY）**几乎没有**编程基础，依靠AI进行*~~许愿式~~*编程，此fork仅用于满足本人需要，如果你不需要本仓库做出的改动，建议回到上游仓库
+
+- 如果你被本仓库不规范的做法或其他任何原因惹恼，并愿意帮助这个*几乎没有编程基础的可怜人*，可以提一提Issues。*~~（别交pr，我看不懂）~~*
+
+- 本仓库相对于上游进行了以下改动：
+1 : 向下兼容到Android7.0(Sdk24)（不稳定！）

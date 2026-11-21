@@ -27,6 +27,7 @@
 
 package com.zalith.pcl.utils.file
 
+import java.nio.file.Paths
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -353,7 +354,7 @@ private suspend fun <T : ZipEntryBase> extractZipEntries(
         else -> "$internalPath/"
     }
 
-    val rootPath = outputDir.absoluteFile.toPath().normalize()
+    val rootPath = Paths.get(outputDir.absoluteFile.path).normalize()
 
     val createdDirs = HashSet<String>()
 
@@ -385,7 +386,7 @@ private suspend fun <T : ZipEntryBase> extractZipEntries(
             }
 
             val targetFile = File(outputDir, relative)
-            val targetPath = targetFile.toPath().normalize()
+            val targetPath = Paths.get(targetFile.path).normalize()
 
             if (!targetPath.startsWith(rootPath)) {
                 throw SecurityException("Illegal path outside output directory: $name")

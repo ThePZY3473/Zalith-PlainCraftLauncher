@@ -27,6 +27,7 @@ import kotlinx.io.IOException
 import org.apache.commons.io.FileUtils
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 
 private const val TAG = "LocalMod"
@@ -100,8 +101,8 @@ class LocalMod(
         return try {
             dest.parentFile?.mkdirs()
             Files.move(
-                this.toPath(),
-                dest.toPath(),
+                Paths.get(this.path),
+                Paths.get(dest.path),
                 StandardCopyOption.REPLACE_EXISTING
             )
             true

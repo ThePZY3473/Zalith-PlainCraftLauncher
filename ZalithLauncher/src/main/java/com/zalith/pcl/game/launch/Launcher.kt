@@ -152,6 +152,15 @@ abstract class Launcher(
         LoggerBridge.appendTitle("Env Map")
         setEnv(screenSize)
 
+        // Android 8.0 以下（API < 26）的 bionic 没有 nl_langinfo / newlocale / uselocale /
+        // pthread_setname_np，API 28 以下没有 memfd_create。NG-GL4ES、OpenAL、Zink、
+        // ANGLE、OSMesa、shaderc 等预编译库都引用了这些符号，直接 dlopen 会因
+        // "cannot locate symbol" 失败（典型表现：GL 类初始化失败，游戏一启动就崩）。
+        // 这里先以 RTLD_GLOBAL 加载 shim，后续加载的库即可解析到它们。
+        if (!ZLBridge.dlopen("${PathManager.DIR_NATIVE_LIB}/liblocale_shim.so")) {
+            LoggerBridge.appendInfo("liblocale_shim.so 加载失败，Android 8.0 以下的渲染器/音频库可能无法使用")
+        }
+
         LoggerBridge.appendTitle("DLOPEN Java Runtime")
         dlopenJavaRuntime()
 

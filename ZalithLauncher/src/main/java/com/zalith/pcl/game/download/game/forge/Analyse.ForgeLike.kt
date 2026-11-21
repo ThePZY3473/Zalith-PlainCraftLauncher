@@ -45,6 +45,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.zip.ZipFile
 
 private const val TAG = "Analyse.ForgeLike"
@@ -209,7 +210,7 @@ private suspend fun scheduleMojangMappings(
                             baseDir = tempMinecraftDir,
                             literal = client.asString,
                             plainConverter = { str ->
-                                val dest: Path = Files.createTempFile(tempDir.toPath(), null, null)
+                                val dest: Path = Files.createTempFile(Paths.get(tempDir.path), null, null)
                                 val item = str
                                     .removePrefix("\\")
                                     .removePrefix("/")

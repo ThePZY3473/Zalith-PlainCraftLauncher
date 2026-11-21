@@ -32,6 +32,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStreamReader
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
@@ -187,7 +188,7 @@ private fun ensureForgePatchesFile(version: Version, embedded: GameManifest, zip
             zip.getInputStream(entry).use { input ->
                 temp.outputStream().use { output -> input.copyTo(output) }
             }
-            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            Files.move(Paths.get(temp.path), Paths.get(target.path), StandardCopyOption.REPLACE_EXISTING)
         } catch (e: IOException) {
             temp.delete()
             throw e

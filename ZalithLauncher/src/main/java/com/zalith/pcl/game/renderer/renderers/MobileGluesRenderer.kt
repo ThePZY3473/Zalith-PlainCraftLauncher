@@ -30,6 +30,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 
 private const val TAG = "MobileGluesRenderer"
@@ -309,13 +310,13 @@ object MobileGluesRenderer : ConfigurableRenderer {
             }
             runCatching {
                 Files.move(
-                    tmpFile.toPath(),
-                    file.toPath(),
+                    Paths.get(tmpFile.path),
+                    Paths.get(file.path),
                     StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.ATOMIC_MOVE
                 )
             }.getOrElse {
-                Files.move(tmpFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                Files.move(Paths.get(tmpFile.path), Paths.get(file.path), StandardCopyOption.REPLACE_EXISTING)
             }
             true
         }.onFailure {

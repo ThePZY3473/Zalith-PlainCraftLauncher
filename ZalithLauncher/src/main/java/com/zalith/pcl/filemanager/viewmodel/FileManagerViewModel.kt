@@ -143,8 +143,8 @@ class FileManagerViewModel @Inject constructor(
         scope = AccessScope(Paths.get(rootPathStr).normalize().toAbsolutePath())
         logic = FileManagerLogic(
             scope = scope,
-            trashRoot = context.cacheDir.toPath().resolve(TRASH_SUBDIR).normalize().toAbsolutePath(),
-            cacheRoot = context.cacheDir.toPath().normalize().toAbsolutePath(),
+            trashRoot = Paths.get(context.cacheDir.path).resolve(TRASH_SUBDIR).normalize().toAbsolutePath(),
+            cacheRoot = Paths.get(context.cacheDir.path).normalize().toAbsolutePath(),
             taskManager = taskManager
         )
 

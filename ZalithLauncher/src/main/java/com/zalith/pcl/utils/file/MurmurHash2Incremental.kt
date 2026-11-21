@@ -20,6 +20,7 @@ package com.zalith.pcl.utils.file
 
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Paths
 
 object MurmurHash2Incremental {
     private const val M32 = 0x5bd1e995
@@ -52,7 +53,7 @@ object MurmurHash2Incremental {
         skipTable: BooleanArray
     ): Int {
         var length = 0
-        Files.newInputStream(file.toPath()).use { stream ->
+        Files.newInputStream(Paths.get(file.path)).use { stream ->
             val buf = ByteArray(8192)
             var bytesRead: Int
             while (stream.read(buf).also { bytesRead = it } != -1) {
@@ -74,7 +75,7 @@ object MurmurHash2Incremental {
         val buffer = ByteArray(4)
         var bufferIndex = 0
 
-        Files.newInputStream(file.toPath()).use { stream ->
+        Files.newInputStream(Paths.get(file.path)).use { stream ->
             val buf = ByteArray(8192)
             var bytesRead: Int
             while (stream.read(buf).also { bytesRead = it } != -1) {

@@ -25,7 +25,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
 import java.io.File
-import java.util.Base64
+import android.util.Base64
 import java.util.Locale
 import java.util.UUID
 
@@ -60,7 +60,7 @@ fun newRandomFileName(characters: Int = 8): String {
         )
     }
 
-    val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    val encoded = Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
     return encoded.take(characters)
 }
 

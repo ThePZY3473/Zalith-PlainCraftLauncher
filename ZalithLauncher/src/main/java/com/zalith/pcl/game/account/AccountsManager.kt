@@ -31,6 +31,7 @@ import com.zalith.pcl.utils.logging.Logger
 import com.zalith.pcl.utils.network.isNetworkAvailable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -42,7 +43,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 private const val TAG = "AccountManager"
 
 object AccountsManager {
-    private val scope = CoroutineScope(Dispatchers.IO)
+    // SupervisorJob：单个后台刷新任务失败时只取消它自己，不要连带杀死整个启动器进程
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     //账号相关
     private val _accounts = CopyOnWriteArrayList<Account>()
@@ -82,7 +84,8 @@ object AccountsManager {
      */
     fun reloadAccounts() {
         scope.launch {
-            suspendReloadAccounts()
+            runCatching { suspendReloadAccounts() }
+                .onFailure { Logger.error(TAG, "Failed to reload accounts", it) }
         }
     }
 
@@ -95,13 +98,14 @@ object AccountsManager {
 
     private suspend fun suspendReloadAccounts() {
         val loadedAccounts = accountDao.getAllAccounts()
-        _accounts.clear()
-        _accounts.addAll(loadedAccounts)
-
-        _accounts.sortWith(compareBy<Account>(
+        // CopyOnWriteArrayList 的迭代器不支持 set()，不能原地 sortWith，
+        // 否则会抛 UnsupportedOperationException（Android 7 上表现为启动即崩）。
+        val sortedAccounts = loadedAccounts.sortedWith(compareBy<Account>(
             { it.accountTypePriority() },
             { it.username },
         ))
+        _accounts.clear()
+        _accounts.addAll(sortedAccounts)
         _accountsFlow.value = _accounts.toList()
 
         if (_accounts.isNotEmpty() && !isAccountExists(AllSettings.currentAccount.getValue())) {
@@ -118,14 +122,18 @@ object AccountsManager {
      */
     fun reloadAuthServers() {
         scope.launch {
-            val loadedServers = authServerDao.getAllServers()
-            _authServers.clear()
-            _authServers.addAll(loadedServers)
+            runCatching {
+                val loadedServers = authServerDao.getAllServers()
+                // 同上：不能对 CopyOnWriteArrayList 原地排序
+                val sortedServers = loadedServers.sortedWith { o1, o2 ->
+                    o1.serverName.compareTo(o2.serverName)
+                }
+                _authServers.clear()
+                _authServers.addAll(sortedServers)
+                _authServersFlow.value = _authServers.toList()
 
-            _authServers.sortWith { o1, o2 -> o1.serverName.compareTo(o2.serverName) }
-            _authServersFlow.value = _authServers.toList()
-
-            Logger.info(TAG, "Loaded ${_authServers.size} auth servers")
+                Logger.info(TAG, "Loaded ${_authServers.size} auth servers")
+            }.onFailure { Logger.error(TAG, "Failed to reload auth servers", it) }
         }
     }
 

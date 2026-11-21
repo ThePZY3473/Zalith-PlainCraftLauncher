@@ -170,3 +170,14 @@ LOCAL_SRC_FILES := flite_cmu_us_kal16.c
 include $(BUILD_SHARED_LIBRARY)
 
 LOCAL_PATH := $(HERE_PATH)
+
+# Android 8.0（API 26）以下的 bionic 没有 nl_langinfo / newlocale / uselocale /
+# pthread_setname_np，API 28 以下没有 memfd_create。NG-GL4ES、OpenAL、Zink、
+# ANGLE、OSMesa、shaderc 等预编译库引用了这些符号，直接 dlopen 会因
+# "cannot locate symbol" 失败。这里编出一个 shim，由 Java 层以 RTLD_GLOBAL
+# 预先加载。
+include $(CLEAR_VARS)
+LOCAL_MODULE := locale_shim
+LOCAL_SRC_FILES := locale_shim.c
+LOCAL_LDLIBS := -llog
+include $(BUILD_SHARED_LIBRARY)

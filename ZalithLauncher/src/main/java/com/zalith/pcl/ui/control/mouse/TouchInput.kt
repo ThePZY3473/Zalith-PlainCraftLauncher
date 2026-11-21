@@ -18,6 +18,7 @@
 
 package com.zalith.pcl.ui.control.mouse
 
+import android.os.Build
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
@@ -512,6 +513,21 @@ fun TouchpadLayout(
  */
 @Composable
 private fun SimpleMouseCapture(
+    enabled: Boolean,
+    onMouse: () -> Unit,
+    onMouseMove: (Offset) -> Unit,
+    onMouseScroll: (Offset) -> Unit,
+    onMouseButton: (button: Int, pressed: Boolean) -> Unit
+) {
+    // Pointer Capture（requestPointerCapture / setOnCapturedPointerListener）是 API 26
+    // 才有的接口，在 Android 7.x 上调用会抛 NoSuchMethodError，这里直接跳过。
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        SimpleMouseCaptureImpl(enabled, onMouse, onMouseMove, onMouseScroll, onMouseButton)
+    }
+}
+
+@Composable
+private fun SimpleMouseCaptureImpl(
     enabled: Boolean,
     onMouse: () -> Unit,
     onMouseMove: (Offset) -> Unit,

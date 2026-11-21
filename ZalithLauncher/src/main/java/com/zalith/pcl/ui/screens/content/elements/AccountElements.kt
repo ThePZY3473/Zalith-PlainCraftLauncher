@@ -163,6 +163,7 @@ import com.zalith.pcl.utils.logging.Logger
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.regex.Pattern
 import kotlin.math.roundToInt
 
@@ -1774,7 +1775,7 @@ private fun getCapeAvatar(
     val capeFile = cape.getFile(PathManager.DIR_ACCOUNT_CAPE)
     if (capeFile.exists()) {
         runCatching {
-            Files.newInputStream(capeFile.toPath()).use { stream ->
+            Files.newInputStream(Paths.get(capeFile.path)).use { stream ->
                 val bitmap = BitmapFactory.decodeStream(stream)
                     ?: throw IOException("Failed to read the cape picture and try to parse it to a bitmap")
                 return getCapeAvatar(bitmap, size, density)
@@ -1818,7 +1819,7 @@ private fun getSkinAvatarFromAccount(
     val skin = account.getSkinFile()
     if (skin.exists()) {
         runCatching {
-            Files.newInputStream(skin.toPath()).use { stream ->
+            Files.newInputStream(Paths.get(skin.path)).use { stream ->
                 val bitmap = BitmapFactory.decodeStream(stream)
                     ?: throw IOException("Failed to read the skin picture and try to parse it to a bitmap")
                 return getSkinAvatar(bitmap, size, density)

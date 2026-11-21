@@ -53,7 +53,7 @@ import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.PublicKey
 import java.security.Signature
-import java.util.Base64
+import org.apache.commons.codec.binary.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -192,7 +192,7 @@ class OfflineYggdrasilServer(
 
 
     private fun PublicKey.toPEMPublicKey(): String {
-        val base64Key = Base64.getEncoder().encodeToString(this.encoded)
+        val base64Key = Base64.encodeBase64String(this.encoded)
         return "-----BEGIN PUBLIC KEY-----\n$base64Key\n-----END PUBLIC KEY-----"
     }
 
@@ -290,7 +290,7 @@ class OfflineYggdrasilServer(
         val signature = Signature.getInstance("SHA1withRSA")
         signature.initSign(keyPair.private)
         signature.update(data.toByteArray(Charsets.UTF_8))
-        return Base64.getEncoder().encodeToString(signature.sign())
+        return Base64.encodeBase64String(signature.sign())
     }
 
     /**
@@ -328,7 +328,7 @@ class OfflineYggdrasilServer(
             }
 
             val jsonString = Json.encodeToString(texturesObject)
-            val encoded = Base64.getEncoder().encodeToString(jsonString.toByteArray(Charsets.UTF_8))
+            val encoded = Base64.encodeBase64String(jsonString.toByteArray(Charsets.UTF_8))
 
             return buildJsonObject {
                 put("id", JsonPrimitive(uuid))

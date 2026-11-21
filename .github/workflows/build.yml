@@ -2,11 +2,27 @@ name: Build APK
 
 on:
   workflow_dispatch:
+    inputs:
+      variant:
+        description: "构建变体"
+        required: true
+        type: choice
+        options: ["Debug", "Release"]
+        default: "Debug"
+      arch:
+        description: "目标架构：可多选，用英文逗号分隔（arm64,arm,x86,x86_64,all）；默认 arm64"
+        required: true
+        type: string
+        default: "arm64"
   workflow_call:
     inputs:
       variant:
         required: true
         type: string
+      arch:
+        required: false
+        type: string
+        default: "arm64"
     secrets:
       KEY_PASSWORD:
         required: false
@@ -18,12 +34,46 @@ on:
         required: false
 
 jobs:
+  # GitHub Actions 表达式没有 replace/replaceAll，无法直接在矩阵里拆字符串，
+  # 所以先用一个轻量 job 把 "arm64,arm" 解析成 JSON 数组。
+  prepare:
+    if: github.event_name != 'pull_request'
+    name: 解析目标架构
+    runs-on: ubuntu-latest
+    outputs:
+      archs: ${{ steps.parse.outputs.archs }}
+    steps:
+      - name: 解析 arch 输入
+        id: parse
+        shell: bash
+        env:
+          RAW_ARCH: ${{ inputs.arch }}
+        run: |
+          raw="${RAW_ARCH// /}"
+          IFS=',' read -ra parts <<< "$raw"
+          archs=()
+          for a in "${parts[@]}"; do
+            case "$a" in
+              arm64|arm|x86|x86_64|all) archs+=("\"$a\"") ;;
+              *) echo "::error::未知架构：${a}（可选 arm64, arm, x86, x86_64, all）"; exit 1 ;;
+            esac
+          done
+          if [ ${#archs[@]} -eq 0 ]; then
+            echo "::error::未指定任何架构"
+            exit 1
+          fi
+          json="[$(IFS=,; echo "${archs[*]}")]"
+          echo "archs=${json}" >> "$GITHUB_OUTPUT"
+          echo "目标架构：${json}"
+
   build:
     if: github.event_name != 'pull_request'
+    needs: prepare
+    name: Build ${{ inputs.variant }} (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: ["all", "arm", "arm64", "x86", "x86_64"]
+        arch: ${{ fromJSON(needs.prepare.outputs.archs) }}
       fail-fast: false
 
     env:

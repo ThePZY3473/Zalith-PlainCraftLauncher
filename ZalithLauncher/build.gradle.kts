@@ -62,24 +62,21 @@ android {
         }
     }
 
-    // 项目签名文件只保存在发布者本机（已被 .gitignore 排除）。公开源码或 CI 上拿不到它时，
-    // 必须还能完成编译：Debug 退回 Android 默认调试签名，Release 输出未签名包。
-    // 否则 `validateSigning` 会在打包阶段直接失败，表现为「本地能编、CI 全红」。
-    val localKeystore = file("zpcl_release.jks")
+    // 本 fork 沿用 `zalith_launcher.jks`（别名 cutepzy）签名，保证已安装的 fork 包
+    // 能覆盖升级；上游 ZalithLauncher 2.8.1 改用的 `zpcl_release.jks` 与本 fork 无关。
+    // 密码来自环境变量 STORE_PASSWORD / KEY_PASSWORD，或根目录
+    // `.store_password.txt` / `.key_password.txt`（已 gitignore）。
+    //
+    // 公开源码或 CI 上拿不到密钥文件时必须还能完成编译：Debug 退回 Android 默认
+    // 调试签名，Release 输出未签名包，否则 `validateSigning` 会在打包阶段直接失败。
+    val localKeystore = file("zalith_launcher.jks")
 
     signingConfigs {
-        // 2026-11 换了新密钥：旧的 `zalith_launcher.jks` 曾随源码提交进公开仓库
-        // （连同 gradle.properties 里的明文密码），等于私钥已公开 —— 任何人都能签出
-        // 一个「官方更新包」。旧密钥作废，新密钥 `zpcl_release.jks` 只在本机，
-        // 密码放 `.store_password.txt` / `.key_password.txt`（已 gitignore）。
-        //
-        // 换签名后无法覆盖旧签名的安装包，必须卸载重装；换包名（com.zpcl.launcher）时
-        // 一并换掉正好把这次代价省了。
         if (localKeystore.exists()) {
             create("releaseBuild") {
                 storeFile = localKeystore
                 storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
-                keyAlias = "zpcl"
+                keyAlias = "cutepzy"
                 keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
                 //同时启用 v1(JAR) / v2 / v3 签名，提升对旧版系统安装器的兼容性
                 enableV1Signing = true
@@ -87,10 +84,10 @@ android {
                 enableV3Signing = true
             }
             create("debugBuild") {
-                // debug 也走新密钥：旧 debug 私钥同样在公开仓库里，没必要留着。
+                // debug 使用与 release 相同的密钥，方便直接覆盖安装已发布的包。
                 storeFile = localKeystore
                 storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
-                keyAlias = "zpcl"
+                keyAlias = "cutepzy"
                 keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
                 //同时启用 v1(JAR) / v2 / v3 签名，提升对旧版系统安装器的兼容性
                 enableV1Signing = true
@@ -98,13 +95,13 @@ android {
                 enableV3Signing = true
             }
         } else {
-            logger.lifecycle("BUILD: zpcl_release.jks not found; falling back to default debug signing / unsigned release.")
+            logger.lifecycle("BUILD: zalith_launcher.jks not found; falling back to default debug signing / unsigned release.")
         }
     }
 
     defaultConfig {
         applicationId = appIdName
-        minSdk = 26
+        minSdk = 24
         targetSdk = 34
         versionCode = launcherVersionCode
         versionName = launcherVersionName
@@ -320,7 +317,7 @@ dependencies {
     implementation(platform(libs.editor.bom))
     implementation(libs.editor)
     implementation(libs.editor.language.textmate)
-    coreLibraryDesugaring(libs.desugar.jdk.libs)
+    coreLibraryDesugaring(libs.desugar.nio)
     //Project
     implementation(project(":LayerController"))
     implementation(project(":ColorPicker"))

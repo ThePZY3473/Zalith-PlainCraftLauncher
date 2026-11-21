@@ -29,7 +29,7 @@ import com.zalith.pcl.utils.logging.Logger
 import com.zalith.pcl.utils.network.ServerAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.Base64
+import org.apache.commons.codec.binary.Base64
 
 private const val TAG = "ServerData"
 
@@ -117,7 +117,7 @@ data class ServerData(
             put(StringTag("ip", this@ServerData.originIp))
 
             this@ServerData.icon?.let { bytes ->
-                Base64.getEncoder().encodeToString(bytes)
+                Base64.encodeBase64String(bytes)
             }?.let { iconString ->
                 put(StringTag("icon", iconString))
             }

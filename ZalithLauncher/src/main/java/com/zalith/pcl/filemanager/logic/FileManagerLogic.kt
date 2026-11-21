@@ -108,7 +108,7 @@ class FileManagerLogic(
         val rootAbs = scope.rootAbs
         val entries = safeDir.toFile().listFiles()
             ?.mapNotNull { child ->
-                val childPath = child.toPath()
+                val childPath = Paths.get(child.path)
                 val attrs = runCatching {
                     Files.readAttributes(childPath, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
                 }.onFailure { e ->

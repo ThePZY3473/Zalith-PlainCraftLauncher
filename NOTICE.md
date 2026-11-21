@@ -7,7 +7,7 @@
 - **上游项目**：Zalith Launcher 2 — <https://github.com/ZalithLauncher/ZalithLauncher2>
 - **上游源码基线**：2.8.1（2026-11 合并；此前基线为 2.6.1）
 - **上游版权**：Copyright (C) 2025–2026 MovTery <movtery228@qq.com> and contributors；各文件原有的版权和许可声明以该文件为准。
-- **本仓库**：<https://github.com/zuanxu53-hub/ZPCL-Launcher>
+- **本仓库**：<https://github.com/CutePZY/ZPCL-Launcher>
 - **许可证**：本项目按 GNU GPLv3 分发，全文见 [LICENSE](LICENSE)；带有「第 3 版或更高版本」许可声明的文件保留其原有授权。第三方内容按各自许可处理。
 - **无担保**：在适用法律允许的范围内，本程序按现状提供，不附带任何明示或默示担保。详见 [LICENSE](LICENSE) 第 15、16 节。
 
@@ -42,7 +42,7 @@ Zalith Launcher 2 在上游 README 中列明以下附加条款：
 
 通过网络分发 GPLv3 覆盖的 APK 时，应在下载处明确指出该**具体 APK** 对应的源码位置，例如准确的提交、源码标签或源码归档，并按 §6 提供等效、免费的访问。对应源码应覆盖该包实际包含的受许可代码、相关修改，以及控制构建和安装所需的脚本。仅链接仓库首页、上游项目或其他版本，不能证明对应源码已提供。源码归档不应包含签名私钥或项目专用凭据；应说明如何用用户自有配置构建。
 
-1.5.5 起的安装包作为 GitHub Release 附件分发，正文标注对应的源码 tag。需要说明的是：正式线（含内置主题与正版登录接线）与开发线并非同一份源树，本仓库目前公开的是开发线；在正式线对应源码公开或以其他方式提供之前，不能把这些 APK 视为已具备完整的对应源码。
+本仓库安装包通常位于Action，大概不会发release。
 
 ## 四、第三方组件与素材
 
@@ -52,4 +52,4 @@ Zalith Launcher 2 在上游 README 中列明以下附加条款：
 
 ## 五、问题反馈
 
-本修改版的问题请在 [ZPCL Launcher Issues](https://github.com/zuanxu53-hub/ZPCL-Launcher/issues) 反馈，不要提交到上游。请附版本号（PCL 界面 → 更多 → 关于与鸣谢）、设备型号、Android 版本、复现步骤和已去除敏感信息的日志。
+本修改版的问题请在 [ZPCL Launcher Issues](https://github.com/CutePZY/ZPCL-Launcher/issues) 反馈，不要提交到上游。请附版本号（PCL 界面 → 更多 → 关于与鸣谢）、设备型号、Android 版本、复现步骤和已去除敏感信息的日志。

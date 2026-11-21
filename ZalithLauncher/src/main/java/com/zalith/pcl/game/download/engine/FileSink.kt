@@ -25,6 +25,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
@@ -40,7 +41,7 @@ class FileSink(
     targetFile: File,
     private val expectedChecksum: String?
 ) : Closeable {
-    private val target: Path = targetFile.toPath()
+    private val target: Path = Paths.get(targetFile.path)
     private val temp: Path
     private val channel: FileChannel
     private val digest: MessageDigest? = expectedChecksum?.let { MessageDigest.getInstance("SHA-1") }

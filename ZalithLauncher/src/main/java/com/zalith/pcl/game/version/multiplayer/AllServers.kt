@@ -33,7 +33,8 @@ import kotlinx.coroutines.withContext
 import org.apache.commons.io.FileUtils
 import java.io.File
 import java.nio.file.Files
-import java.util.Base64
+import java.nio.file.Paths
+import org.apache.commons.codec.binary.Base64
 
 private const val TAG = "AllServers"
 
@@ -126,9 +127,9 @@ class AllServers {
                 // 取它的父目录 —— 否则这里会抛 `NotDirectoryException`，而被外层 runCatching
                 // 吞掉后表现为「显示保存成功、文件其实没变」。
                 val currentPath = if (savePath.isDirectory) {
-                    savePath.toPath()
+                    Paths.get(savePath.path)
                 } else {
-                    (savePath.parentFile ?: savePath).toPath()
+                    Paths.get((savePath.parentFile ?: savePath).path)
                 }
                 val newFile = Files.createTempFile(currentPath, "servers", ".dat").toFile()
                 NBTIO.writeFile(tag, newFile, false, false)
@@ -173,7 +174,7 @@ class AllServers {
         //尝试解析icon作为placeholder
         val icon = asString("icon", null)?.let { base64 ->
             runCatching {
-                Base64.getDecoder().decode(base64)
+                Base64.decodeBase64(base64)
             }.onFailure {
                 Logger.warning(TAG, "Unable to recognize server $name's icon as a valid icon array")
             }.getOrNull()

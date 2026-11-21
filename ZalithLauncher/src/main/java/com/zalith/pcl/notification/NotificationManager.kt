@@ -59,6 +59,8 @@ object NotificationManager {
     }
 
     fun createNotificationChannel(context: Context, channelData: NotificationChannelData) {
+        // 通知渠道是 Android 8.0 才有的概念，低版本直接用通知的优先级字段
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(channelData.channelId, channelData.channelName(context), channelData.level).apply {
             channelData.channelDescription?.invoke(context)?.let { desc ->
@@ -73,18 +75,22 @@ object NotificationManager {
      * 跳转到通知设置页，出现异常则仅跳转到详细设置页
      */
     fun openNotificationSettings(context: Context) {
-        try {
-            val intent = Intent()
-            intent.action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
-            intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            intent.putExtra(Settings.EXTRA_CHANNEL_ID, context.applicationInfo.uid)
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            //如果出现异常，跳转到应用的详细设置页面
-            val intent = Intent()
-            intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-            intent.data = Uri.fromParts("package", context.packageName, null)
-            context.startActivity(intent)
+        // 应用通知设置页是 API 26 才有的入口，低版本只能进应用详情页
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val intent = Intent()
+                intent.action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                intent.putExtra(Settings.EXTRA_CHANNEL_ID, context.applicationInfo.uid)
+                context.startActivity(intent)
+                return
+            } catch (_: Exception) {
+                // 部分定制系统没有这个页面，继续走下面的详细设置页
+            }
         }
+        val intent = Intent()
+        intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+        intent.data = Uri.fromParts("package", context.packageName, null)
+        context.startActivity(intent)
     }
 }

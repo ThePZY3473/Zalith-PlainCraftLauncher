@@ -18,6 +18,7 @@
 
 package com.zalith.pcl.game.download.game.forge
 
+import java.nio.file.Paths
 import com.zalith.pcl.game.download.game.models.fromDescriptor
 import com.zalith.pcl.game.download.game.models.toPath
 import com.zalith.pcl.utils.string.isSurrounded
@@ -38,7 +39,7 @@ fun parseLiteral(
         return literal.removeSurrounding("'")
     } else if (literal.isSurrounded("[", "]")) {
         val path = fromDescriptor(literal.removeSurrounding("[", "]")).toPath()
-        return baseDir.toPath().resolve("libraries").resolve(path).toAbsolutePath().toString()
+        return Paths.get(baseDir.path).resolve("libraries").resolve(path).toAbsolutePath().toString()
     } else {
         return plainConverter(replaceTokens(vars, literal))
     }

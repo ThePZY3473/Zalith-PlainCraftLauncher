@@ -18,6 +18,7 @@
 
 package com.zalith.pcl.game.version.export.platform
 
+import java.nio.file.Paths
 import android.content.Context
 import com.zalith.pcl.R
 import com.zalith.pcl.coroutine.TitledTask
@@ -71,7 +72,7 @@ class MCBBSPackExporter: AbstractExporter(
                     MCBBSManifest.AddonFile(
                         force = true,
                         path = relativePath(file, info.gamePath.absolutePath),
-                        hash = DigestUtils.digestToString("SHA-1", file.toPath())
+                        hash = DigestUtils.digestToString("SHA-1", Paths.get(file.path))
                     )
                 } else {
                     null

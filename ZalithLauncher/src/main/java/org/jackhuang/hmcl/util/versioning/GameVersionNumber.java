@@ -71,7 +71,11 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
 
                 return Release.parse(version);
             }
-        } catch (Throwable ignore) {
+        } catch (Throwable e) {
+            // 不要静默吞掉异常：例如旧版 Android（API 26 以下）不支持正则命名分组，
+            // Release 的正则编译失败会让这里回退成 Special，随后 Versions.<clinit>
+            // 强转 Release 时就会抛出难以定位的 ClassCastException。
+            Logger.INSTANCE.warning("GameVersionNumber", "Failed to parse game version: " + version, e);
         }
 
         return new Special(version, version);
@@ -348,7 +352,12 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
                 ReleaseType.UNKNOWN, VersionNumber.ZERO, Additional.NONE
         );
 
-        private static final Pattern VERSION_PATTERN = Pattern.compile("(?<prefix>(?<major>1|[1-9]\\d+)\\.(?<minor>\\d+)(\\.(?<patch>[0-9]+))?)(?<suffix>.*)");
+        // 注意：这里不能使用命名分组 (?<name>...) —— Android 8.0（API 26）以下的
+        // java.util.regex 实现不支持命名分组，Pattern.compile 会抛 PatternSyntaxException。
+        // 而 Release 在静态初始化时就会编译这个正则，一旦失败会连带 Versions.<clinit>
+        // 崩溃（表现为 Special cannot be cast to Release）。因此统一使用数字分组：
+        //   1 = prefix, 2 = major, 3 = minor, 4 = ".patch"（含点）, 5 = patch, 6 = suffix
+        private static final Pattern VERSION_PATTERN = Pattern.compile("((1|[1-9]\\d+)\\.(\\d+)(\\.([0-9]+))?)(.*)");
 
         static Release parse(String value) {
             Matcher matcher = VERSION_PATTERN.matcher(value);
@@ -356,16 +365,16 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
                 throw new IllegalArgumentException(value);
             }
 
-            int major = Integer.parseInt(matcher.group("major"));
+            int major = Integer.parseInt(matcher.group(2));
             if (major != 1 && major < MINIMUM_YEAR_MAJOR_VERSION)
                 throw new IllegalArgumentException(value);
 
-            int minor = Integer.parseInt(matcher.group("minor"));
+            int minor = Integer.parseInt(matcher.group(3));
 
-            String patchString = matcher.group("patch");
+            String patchString = matcher.group(5);
             int patch = patchString != null ? Integer.parseInt(patchString) : 0;
 
-            String suffix = matcher.group("suffix");
+            String suffix = matcher.group(6);
 
             boolean isLegacyRelease = major == 1;
 
@@ -437,7 +446,7 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
             String normalized;
             if (needNormalize) {
                 StringBuilder builder = new StringBuilder(value.length());
-                builder.append(matcher.group("prefix"));
+                builder.append(matcher.group(1));
                 if (releaseType != ReleaseType.GA) {
                     builder.append(isLegacyRelease ? releaseType.legacyInfix : releaseType.newInfix);
                     builder.append(eaVersion);
@@ -865,8 +874,11 @@ public abstract sealed class GameVersionNumber implements Comparable<GameVersion
 
                     GameVersionNumber version = GameVersionNumber.asGameVersion(line);
 
-                    if (currentRelease == null)
-                        currentRelease = (Release) version;
+                    if (currentRelease == null) {
+                        if (!(version instanceof Release release))
+                            throw new AssertionError("The first game version is not a release: " + line);
+                        currentRelease = release;
+                    }
 
                     if (version instanceof LegacySnapshot snapshot) {
                         snapshots.add(snapshot);
