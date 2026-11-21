@@ -77,10 +77,10 @@ jobs:
       fail-fast: false
 
     env:
-      # 推送触发的 Debug 构建只做编译校验：不注入正版登录 / CurseForge 配置，
-      # 避免公开仓库的构建产物携带发行线专用凭据。
-      KEY_PASSWORD: ${{ inputs.variant == 'Release' && secrets.KEY_PASSWORD || '' }}
-      STORE_PASSWORD: ${{ inputs.variant == 'Release' && secrets.STORE_PASSWORD || '' }}
+      # 签名密码对所有变体注入：CI 上的 Debug 包也用项目密钥签名，便于直接覆盖安装。
+      # 正版登录 / CurseForge 配置只在 Release 注入，避免构建产物携带发行线专用凭据。
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
       OAUTH_CLIENT_ID: ${{ inputs.variant == 'Release' && secrets.OAUTH_CLIENT_ID || '' }}
       CURSEFORGE_API_KEY: ${{ inputs.variant == 'Release' && secrets.CURSEFORGE_API_KEY || '' }}
 

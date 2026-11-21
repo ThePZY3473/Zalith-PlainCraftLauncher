@@ -70,14 +70,21 @@ android {
     // 公开源码或 CI 上拿不到密钥文件时必须还能完成编译：Debug 退回 Android 默认
     // 调试签名，Release 输出未签名包，否则 `validateSigning` 会在打包阶段直接失败。
     val localKeystore = file("zalith_launcher.jks")
+    // 只有 keystore 与两个密码都拿得到时才启用项目签名。CI 上 keystore 随源码存在，
+    // 但推送触发的构建不注入密码，此时若仍尝试签名会报
+    // "Keystore was tampered with, or password was incorrect"。
+    val localStorePassword = if (localKeystore.exists()) getKeyFromLocal("STORE_PASSWORD", ".store_password.txt") else ""
+    val localKeyPassword = if (localKeystore.exists()) getKeyFromLocal("KEY_PASSWORD", ".key_password.txt") else ""
+    val canSignWithLocal = localKeystore.exists() &&
+        localStorePassword.isNotBlank() && localKeyPassword.isNotBlank()
 
     signingConfigs {
-        if (localKeystore.exists()) {
+        if (canSignWithLocal) {
             create("releaseBuild") {
                 storeFile = localKeystore
-                storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
+                storePassword = localStorePassword
                 keyAlias = "cutepzy"
-                keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+                keyPassword = localKeyPassword
                 //同时启用 v1(JAR) / v2 / v3 签名，提升对旧版系统安装器的兼容性
                 enableV1Signing = true
                 enableV2Signing = true
@@ -86,16 +93,16 @@ android {
             create("debugBuild") {
                 // debug 使用与 release 相同的密钥，方便直接覆盖安装已发布的包。
                 storeFile = localKeystore
-                storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
+                storePassword = localStorePassword
                 keyAlias = "cutepzy"
-                keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+                keyPassword = localKeyPassword
                 //同时启用 v1(JAR) / v2 / v3 签名，提升对旧版系统安装器的兼容性
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
             }
         } else {
-            logger.lifecycle("BUILD: zalith_launcher.jks not found; falling back to default debug signing / unsigned release.")
+            logger.lifecycle("BUILD: zalith_launcher.jks or its passwords unavailable; falling back to default debug signing / unsigned release.")
         }
     }
 
