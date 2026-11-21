@@ -172,6 +172,8 @@ class ModPackInstaller(
                     fun updateProgress() {
                         task.updateProgress((downloadedSize.toDouble() / totalFileSize).toFloat())
                     }
+                    // 安装器动辄几百 MB：把大小告诉引擎，才能走分段并行，否则只能单连接爬
+                    val expectedSize = version.platformFileSize()
                     withSpeedReport(
                         onSpeedReport = { bytes ->
                             task.updateSpeed(bytes)
@@ -186,6 +188,7 @@ class ModPackInstaller(
                                 .mapMCIMMirrorUrls(),
                             sha1 = version.platformSha1(),
                             outputFile = installerFile,
+                            expectedSize = expectedSize,
                             sizeCallback = { size ->
                                 downloadedSize += size
                                 updateProgress()

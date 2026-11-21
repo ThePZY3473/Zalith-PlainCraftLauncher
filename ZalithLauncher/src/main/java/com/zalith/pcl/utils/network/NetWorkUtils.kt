@@ -58,8 +58,24 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private const val TAG = "NetWorkUtils"
 
-/** 单个文件下载的最大允许时间 */
+/** 单个文件下载的最大允许时间（兜底值；已知大小的大文件会按下面的速度下限放宽） */
 private const val DOWNLOAD_PER_FILE_TIMEOUT = 3 * 60 * 1000L
+
+/** 估算超时时假定的最低速度：96 KB/s */
+private const val SLOWEST_BYTES_PER_SECOND = 96L * 1024L
+
+/**
+ * 单个文件的超时时间。
+ *
+ * 原来固定 3 分钟：300 MB 的整合包只要低于 1.7 MB/s 就必然超时，然后从头再来 ——
+ * 用户看到的就是「一直在下、进度反复」。这里按 96 KB/s 的底线速度放宽，
+ * 真正的断流交给 [Fetcher] 的 10 秒读超时去判定，不必靠总时长兜底。
+ */
+private fun downloadTimeoutMillis(expectedSize: Long, base: Long = DOWNLOAD_PER_FILE_TIMEOUT): Long {
+    if (expectedSize <= 0L) return base
+    val bySpeed = expectedSize * 1000L / SLOWEST_BYTES_PER_SECOND
+    return maxOf(base, bySpeed)
+}
 
 /** 多候选源下载的最大允许时间 */
 private const val DOWNLOAD_SOURCES_TIMEOUT = 5 * 60 * 1000L
@@ -94,9 +110,14 @@ suspend fun downloadFile(
     url: String,
     outputFile: File,
     sha1: String? = null,
+    /** 清单里声明的文件大小。传了才能走「分段并行」，大文件（整合包、安装器）会快好几倍 */
+    expectedSize: Long = -1L,
     sizeCallback: (Long) -> Unit = {}
-): Unit = withTimeout(DOWNLOAD_PER_FILE_TIMEOUT.milliseconds) {
-    DownloadEngine.download(DownloadRequest(listOf(url), outputFile, sha1), sizeCallback = sizeCallback)
+): Unit = withTimeout(downloadTimeoutMillis(expectedSize).milliseconds) {
+    DownloadEngine.download(
+        DownloadRequest(listOf(url), outputFile, sha1, expectedSize),
+        sizeCallback = sizeCallback,
+    )
 }
 
 /**
@@ -107,9 +128,15 @@ suspend fun downloadFileFromSources(
     urls: List<String>,
     outputFile: File,
     sha1: String? = null,
+    expectedSize: Long = -1L,
     sizeCallback: (Long) -> Unit = {}
-): Unit = withTimeout(DOWNLOAD_SOURCES_TIMEOUT.milliseconds) {
-    DownloadEngine.download(DownloadRequest(urls, outputFile, sha1), sizeCallback = sizeCallback)
+): Unit = withTimeout(
+    downloadTimeoutMillis(expectedSize, base = DOWNLOAD_SOURCES_TIMEOUT).milliseconds
+) {
+    DownloadEngine.download(
+        DownloadRequest(urls, outputFile, sha1, expectedSize),
+        sizeCallback = sizeCallback,
+    )
 }
 
 /**

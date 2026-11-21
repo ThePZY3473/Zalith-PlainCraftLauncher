@@ -2574,6 +2574,8 @@ internal fun startModpackImport(
         }
     }
     val total = version.platformFileSize().coerceAtLeast(1L)
+    // 下载任务把失败原因存这儿（见下面的注释）
+    var downloadFailure: Throwable? = null
 
     val downloadTask = Task.runTask(
         // 【id 必须每次唯一】以前固定写 `pcl2_modpack_download/<平台ID>`：
@@ -2584,15 +2586,28 @@ internal fun startModpackImport(
         task = { task ->
             task.updateMessage(androidText("正在下载整合包：${version.platformFileName()}"))
             var done = 0L
-            downloadFile(
-                url = version.platformDownloadUrl(),
-                outputFile = output,
-                sha1 = version.platformSha1(),
-                sizeCallback = { size ->
-                    done += size
-                    task.updateProgress((done.toDouble() / total.toDouble()).toFloat())
-                },
-            )
+            // TaskStage 里没有「失败」这一档：任务体抛异常也会被收尾成 COMPLETED，
+            // 结束回调分不出「下完了」和「下挂了」（超时、断网都会落到同一句
+            // 「包不见了」上面）。这里自己留一份原因，报错时才说得出人话。
+            downloadFailure = null
+            try {
+                downloadFile(
+                    url = version.platformDownloadUrl(),
+                    outputFile = output,
+                    sha1 = version.platformSha1(),
+                    // 有了大小才能分段并行：没有它，一个几百 MB 的包只能单连接慢慢爬
+                    expectedSize = total,
+                    sizeCallback = { size ->
+                        done += size
+                        task.updateProgress((done.toDouble() / total.toDouble()).toFloat())
+                    },
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                downloadFailure = e
+                throw e
+            }
             task.updateProgress(1f)
         },
     )
@@ -2630,9 +2645,14 @@ internal fun startModpackImport(
             // 直接交给导入器只会抛一个 `FileNotFoundException` 给用户看，没人看得懂。
             if (!output.isFile || output.length() <= 0L) {
                 runtime.clearModpackImport(importId)
+                val reason = downloadFailure?.let { it.message ?: it.javaClass.simpleName }
                 runtime.submitErrorText(
                     "整合包导入失败",
-                    "下载好的整合包不见了（可能被系统清理了缓存），请重新安装一次。",
+                    if (reason != null) {
+                        "下载没有完成：$reason\n请检查网络后重试。"
+                    } else {
+                        "下载好的整合包不见了（可能被系统清理了缓存），请重新安装一次。"
+                    },
                 )
                 return@submitTask
             }
