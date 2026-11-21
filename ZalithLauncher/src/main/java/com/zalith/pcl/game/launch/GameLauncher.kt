@@ -256,9 +256,12 @@ class GameLauncher(
         }
 
         // Cleanroom 直接用 SDL3 初始化视频子系统，但不经过 SDL_main 包装，
-        // 不补这一步 SDL 会拒绝初始化（Application didn't initialize properly）。
+        // 不补这一步 SDL 会拒绝初始化（Application didn't initialize properly）；
+        // 另外 Cleanroom 只调 SDL_InitSubSystem，从不调 SDL_Init，
+        // 线程/TLS 系统未初始化会让 SDL_GetCurrentThread() 返回 NULL 并崩溃。
         ZLBridge.dlopen("${PathManager.DIR_NATIVE_LIB}/libSDL3.so")
-        ZLBridge.sdlSetMainReady()
+        val sdlReady = ZLBridge.sdlSetMainReady()
+        Logger.info(TAG, "SDL 核心初始化（SDL_SetMainReady + SDL_Init(0)）: ${if (sdlReady) "成功" else "失败"}")
     }
 
     override fun progressFinalUserArgs(args: MutableList<String>, ramAllocation: Int) {

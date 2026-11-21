@@ -75,9 +75,12 @@ public final class ZLBridge {
      * Cleanroom 通过 LWJGL 直接调用 SDL_InitSubSystem(SDL_INIT_VIDEO)，但它的入口
      * 不经过 SDL_main 包装，SDL 会报
      * "Application didn't initialize properly, did you include SDL_main.h..."。
-     * 这里补调 SDL_SetMainReady()。
+     * 这里补调 SDL_SetMainReady()，再补一次 SDL_Init(0) 初始化 SDL 的线程/TLS
+     * 系统（否则 SDL_GetCurrentThread() 返回 NULL，后续 SDL 调用会 SIGSEGV）。
+     *
+     * @return SDL_Init(0) 是否成功
      */
-    @Keep public static native void sdlSetMainReady();
+    @Keep public static native boolean sdlSetMainReady();
 
     //Render
     @Keep public static native void setupBridgeWindow(Object surface);

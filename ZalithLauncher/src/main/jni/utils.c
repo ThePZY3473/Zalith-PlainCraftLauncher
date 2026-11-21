@@ -130,7 +130,7 @@ JNIEXPORT jboolean JNICALL Java_com_zalith_pcl_bridge_ZLBridge_dlopen(JNIEnv *en
 	return handle != NULL;
 }
 
-JNIEXPORT void JNICALL Java_com_zalith_pcl_bridge_ZLBridge_sdlSetMainReady(JNIEnv *env, jclass clazz) {
+JNIEXPORT jboolean JNICALL Java_com_zalith_pcl_bridge_ZLBridge_sdlSetMainReady(JNIEnv *env, jclass clazz) {
 	// SDL3 只在 SDL_InitSubSystem(SDL_INIT_VIDEO) 时检查 SDL_MainIsReady。
 	// Cleanroom 的入口不经过 SDL_main 包装，所以这里补一次 SDL_SetMainReady()，
 	// 否则会得到 "Application didn't initialize properly..."。
@@ -138,15 +138,28 @@ JNIEXPORT void JNICALL Java_com_zalith_pcl_bridge_ZLBridge_sdlSetMainReady(JNIEn
 	if (handle == NULL) {
 		__android_log_print(ANDROID_LOG_WARN, "ZLBridge",
 		                    "SDL: libSDL3.so not loadable: %s", dlerror());
-		return;
+		return JNI_FALSE;
 	}
 	void (*set_main_ready)(void) = (void (*)(void)) dlsym(handle, "SDL_SetMainReady");
 	if (set_main_ready == NULL) {
 		__android_log_print(ANDROID_LOG_WARN, "ZLBridge", "SDL: SDL_SetMainReady not found");
-		return;
+		return JNI_FALSE;
 	}
 	set_main_ready();
-	LOG_TO_D("SDL: SDL_SetMainReady called");
+
+	// Cleanroom 只调 SDL_InitSubSystem(SDL_INIT_VIDEO)，从不调 SDL_Init，
+	// 于是 SDL 的线程/TLS 系统没有初始化：SDL_GetCurrentThread() 返回 NULL，
+	// 后续 SDL 内部解引用它就会 SIGSEGV（libSDL3.so+0xb35b8）。
+	// 这里补一次 SDL_Init(0)（不初始化任何子系统，只建线程/TLS 环境）。
+	int (*sdl_init)(unsigned int) = (int (*)(unsigned int)) dlsym(handle, "SDL_Init");
+	if (sdl_init == NULL) {
+		__android_log_print(ANDROID_LOG_WARN, "ZLBridge", "SDL: SDL_Init not found");
+		return JNI_FALSE;
+	}
+	int rc = sdl_init(0);
+	__android_log_print(ANDROID_LOG_INFO, "ZLBridge", "SDL_Init(0) -> %d", rc);
+	LOG_TO_D("SDL: SDL_SetMainReady + SDL_Init(0)");
+	return rc ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jlong JNICALL Java_com_zalith_pcl_bridge_ZLBridge_getJavaVMPointer(JNIEnv *env, jclass clazz) {
