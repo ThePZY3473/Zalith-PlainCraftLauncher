@@ -1,4 +1,5 @@
 import com.android.build.api.variant.FilterConfiguration.FilterType.ABI
+import java.security.MessageDigest
 import com.android.build.api.variant.impl.VariantOutputImpl
 import com.android.build.gradle.tasks.MergeSourceSetFolders
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -281,7 +282,7 @@ androidComponents {
                                 append("  \"files\": [\n")
                                 entries.forEachIndexed { index, entry ->
                                     val (file, path) = entry
-                                    val digest = java.security.MessageDigest.getInstance("SHA-1")
+                                    val digest = MessageDigest.getInstance("SHA-1")
                                     file.inputStream().use { input ->
                                         val buffer = ByteArray(1 shl 16)
                                         while (true) {
@@ -290,7 +291,9 @@ androidComponents {
                                             digest.update(buffer, 0, read)
                                         }
                                     }
-                                    val sha1 = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                                    val sha1 = digest.digest().joinToString("") { byte ->
+                                        "%02x".format(byte.toInt() and 0xff)
+                                    }
                                     append("    {\"path\": \"$path\", \"size\": ${file.length()}, \"sha1\": \"$sha1\"}")
                                     append(if (index == entries.lastIndex) "\n" else ",\n")
                                 }
