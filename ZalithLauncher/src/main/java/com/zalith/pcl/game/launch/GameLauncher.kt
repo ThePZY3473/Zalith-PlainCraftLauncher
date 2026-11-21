@@ -239,7 +239,11 @@ class GameLauncher(
 
         val rendererLib = getRendererLibrary() ?: return
         if (!ZLBridge.dlopen(rendererLib) && !ZLBridge.dlopen(findInLdLibPath(rendererLib))) {
-            Logger.error(TAG, "Failed to load renderer $rendererLib")
+            // 裸文件名可能不在 dlopen 的默认搜索路径里，最后按 native 库目录的绝对路径再试一次
+            val absolute = File(PathManager.DIR_NATIVE_LIB, rendererLib).absolutePath
+            if (!ZLBridge.dlopen(absolute)) {
+                Logger.error(TAG, "Failed to load renderer $rendererLib: ${ZLBridge.getLastDlopenError()}")
+            }
         }
     }
 

@@ -66,6 +66,9 @@ public final class ZLBridge {
     @Keep public static native void setLdLibraryPath(String ldLibraryPath);
     @Keep public static native boolean dlopen(String libPath);
 
+    /** 上一次 dlopen 的结果/失败原因（诊断用）。 */
+    @Keep public static native String getLastDlopenError();
+
     //Render
     @Keep public static native void setupBridgeWindow(Object surface);
     @Keep public static native void releaseBridgeWindow();

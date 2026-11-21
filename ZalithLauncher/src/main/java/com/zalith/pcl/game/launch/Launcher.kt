@@ -158,7 +158,9 @@ abstract class Launcher(
         // "cannot locate symbol" 失败（典型表现：GL 类初始化失败，游戏一启动就崩）。
         // 这里先以 RTLD_GLOBAL 加载 shim，后续加载的库即可解析到它们。
         if (!ZLBridge.dlopen("${PathManager.DIR_NATIVE_LIB}/liblocale_shim.so")) {
-            LoggerBridge.appendInfo("liblocale_shim.so 加载失败，Android 8.0 以下的渲染器/音频库可能无法使用")
+            val reason = ZLBridge.getLastDlopenError()
+            Logger.error("Launcher", "liblocale_shim.so 加载失败：$reason")
+            LoggerBridge.appendInfo("liblocale_shim.so 加载失败，Android 8.0 以下的渲染器/音频库可能无法使用：$reason")
         }
 
         LoggerBridge.appendTitle("DLOPEN Java Runtime")

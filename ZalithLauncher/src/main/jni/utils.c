@@ -101,16 +101,29 @@ JNIEXPORT void JNICALL Java_com_zalith_pcl_bridge_ZLBridge_setLdLibraryPath(JNIE
 	(*env)->ReleaseStringUTFChars(env, ldLibraryPath, ldLibPathUtf);
 }
 
+static char last_dlopen_error[1024];
+
+JNIEXPORT jstring JNICALL Java_com_zalith_pcl_bridge_ZLBridge_getLastDlopenError(JNIEnv *env, jclass clazz) {
+	return (*env)->NewStringUTF(env, last_dlopen_error);
+}
+
 JNIEXPORT jboolean JNICALL Java_com_zalith_pcl_bridge_ZLBridge_dlopen(JNIEnv *env, jclass clazz, jstring name) {
 	const char *nameUtf = (*env)->GetStringUTFChars(env, name, 0);
 	void* handle = dlopen(nameUtf, RTLD_GLOBAL | RTLD_LAZY);
 	if (!handle) {
 		const char *err = dlerror();
+		// RTLD_DEFAULT 查 nl_langinfo 可以判断 locale_shim 的符号是否在全局作用域：
+		// 找不到说明 shim 没加载成功，或版本不匹配。
+		void *langinfo = dlsym(RTLD_DEFAULT, "nl_langinfo");
+		snprintf(last_dlopen_error, sizeof(last_dlopen_error),
+		         "%s -> %s | RTLD_DEFAULT nl_langinfo: %s",
+		         nameUtf, err ? err : "unknown", langinfo ? "found" : "NOT FOUND");
 		LOG_TO_E("DLOPEN: %s , failed ( %s )", nameUtf, err ? err : "unknown");
 		// stderr 在 Android 应用进程里通常被丢弃，同时写一份到 logcat 方便排查
 		__android_log_print(ANDROID_LOG_ERROR, "ZLBridge",
 		                    "dlopen(%s) failed: %s", nameUtf, err ? err : "unknown");
 	} else {
+		snprintf(last_dlopen_error, sizeof(last_dlopen_error), "%s -> ok", nameUtf);
 		LOG_TO_D("DLOPEN: %s , success", nameUtf);
 	}
 	(*env)->ReleaseStringUTFChars(env, name, nameUtf);
