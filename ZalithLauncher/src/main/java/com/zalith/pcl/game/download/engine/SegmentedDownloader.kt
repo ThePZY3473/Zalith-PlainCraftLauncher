@@ -102,8 +102,13 @@ object SegmentedDownloader {
     /** 单段最小长度：段太小（比如 200KB 切 8 段）每条连接都在慢启动，反而更慢 */
     private const val MIN_SEGMENT_SIZE = 2L * 1024 * 1024
 
-    /** 单个文件最多几条连接（PCL 的上限是设置里的线程数，这里取一个手机上网够用的值） */
-    const val MAX_SEGMENTS = 12
+    /**
+     * 单个文件最多几条连接。
+     *
+     * 实测很多 CDN / 中转是**按连接限速**的（一条连接 20~30 KB/s），所以 12 段只能跑到
+     * 240 KB/s 上下 —— 与 PCL 一样，把上限抬到 32 段，靠连接数吃满带宽。
+     */
+    const val MAX_SEGMENTS = 32
 
     /** 切分下限：剩余不足这么多就不再切（PCL 的 FilePieceLimit 是 256KB，手机上放宽一些） */
     private const val SPLIT_MIN_REMAINING = 1L * 1024 * 1024
@@ -125,7 +130,7 @@ object SegmentedDownloader {
      * 表现出来是「下载变快了一下，然后整个应用卡住」。配额用满时**立刻返回 false
      * 让这个文件走单连接**，绝不排队等待 —— 排队会让一批文件互相等，比慢一点糟糕得多。
      */
-    private const val MAX_PARALLEL_FILES = 4
+    private const val MAX_PARALLEL_FILES = 3
 
     private val activeSegmentedFiles = AtomicInteger(0)
 
@@ -307,6 +312,15 @@ object SegmentedDownloader {
             if (delta > 0L) heartbeat.set(System.currentTimeMillis())
             report(delta)
         }
+        // 每个源已经拉了多少字节：新段优先发给「目前最快」的源，慢源自然被冷落（PCL 的源降级）
+        val bytesBySource = Array(sources.size) { AtomicLong(0L) }
+        fun fastestSource(): Int {
+            var best = 0
+            for (i in 1 until sources.size) {
+                if (bytesBySource[i].get() > bytesBySource[best].get()) best = i
+            }
+            return best
+        }
 
         try {
             RandomAccessFile(temp, "rw").use { raf ->
@@ -321,7 +335,7 @@ object SegmentedDownloader {
                             segments += segment
                             jobs += scope.launch(SEGMENT_DISPATCHER) {
                                 runInterruptible {
-                                    runSegment(sources, channel, segment, onBytes)
+                                    runSegment(sources, channel, segment, onBytes, bytesBySource)
                                 }
                             }
                         }
@@ -352,6 +366,8 @@ object SegmentedDownloader {
                                     .filter { it.remaining() >= SPLIT_MIN_REMAINING }
                                     .maxByOrNull { it.remaining() } ?: continue
                                 val tail = candidate.splitTail(SPLIT_TAIL_RATIO, sources.size) ?: continue
+                                // 新段交给目前跑得最快的那个源，而不是简单轮转
+                                tail.source.set(fastestSource())
                                 Logger.debug(
                                     TAG,
                                     "Split segment for ${targetFile.name}: tail $SPLIT_TAIL_RATIO"
@@ -399,15 +415,22 @@ object SegmentedDownloader {
         channel: FileChannel,
         segment: Segment,
         report: (Long) -> Unit,
+        bytesBySource: Array<AtomicLong>,
     ) {
         // 每个源给 SEGMENT_RETRY 次机会；换源时从当前进度续上，不重下整份
         var attempt = 0
         val maxAttempts = SEGMENT_RETRY * sources.size
         while (true) {
             if (segment.remaining() <= 0L) return
-            val source = sources[segment.source.get().mod(sources.size)]
+            val sourceIndex = segment.source.get().mod(sources.size)
+            val source = sources[sourceIndex]
+            val bucket = bytesBySource.getOrNull(sourceIndex)
             try {
-                fetchSegment(source.url, channel, segment, source.validator, report)
+                // 按源记账，供 fastestSource() 选路
+                fetchSegment(source.url, channel, segment, source.validator) { delta ->
+                    bucket?.addAndGet(delta)
+                    report(delta)
+                }
                 if (segment.remaining() <= 0L) return
                 // 连接正常结束但这段的字节没收全：按断流处理，重试时从 cursor 续传
                 throw IOException("Segment ended early, ${segment.remaining()} bytes left")
