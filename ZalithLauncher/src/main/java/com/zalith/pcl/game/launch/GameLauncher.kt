@@ -242,7 +242,16 @@ class GameLauncher(
             // 裸文件名可能不在 dlopen 的默认搜索路径里，最后按 native 库目录的绝对路径再试一次
             val absolute = File(PathManager.DIR_NATIVE_LIB, rendererLib).absolutePath
             if (!ZLBridge.dlopen(absolute)) {
-                Logger.error(TAG, "Failed to load renderer $rendererLib: ${ZLBridge.getLastDlopenError()}")
+                // 最后尝试 System.loadLibrary：走 classloader namespace，能解析同
+                // namespace 内 shim 提供的符号（dlopen 的全局符号有时不参与解析）。
+                val libName = rendererLib.removePrefix("lib").removeSuffix(".so")
+                try {
+                    System.loadLibrary(libName)
+                    Logger.info(TAG, "渲染器已通过 System.loadLibrary($libName) 加载")
+                } catch (t: Throwable) {
+                    Logger.error(TAG, "Failed to load renderer $rendererLib: ${ZLBridge.getLastDlopenError()}", t)
+                    Logger.error(TAG, "System.loadLibrary($libName) 失败: ${t.message}")
+                }
             }
         }
     }

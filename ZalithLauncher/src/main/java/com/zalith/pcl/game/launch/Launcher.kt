@@ -157,12 +157,21 @@ abstract class Launcher(
         // ANGLE、OSMesa、shaderc 等预编译库都引用了这些符号，直接 dlopen 会因
         // "cannot locate symbol" 失败（典型表现：GL 类初始化失败，游戏一启动就崩）。
         // 这里先以 RTLD_GLOBAL 加载 shim，后续加载的库即可解析到它们。
-        if (!ZLBridge.dlopen("${PathManager.DIR_NATIVE_LIB}/liblocale_shim.so")) {
-            val reason = ZLBridge.getLastDlopenError()
-            Logger.error("Launcher", "liblocale_shim.so 加载失败：$reason")
-            LoggerBridge.appendInfo("liblocale_shim.so 加载失败，Android 8.0 以下的渲染器/音频库可能无法使用：$reason")
-        } else {
-            Logger.info("Launcher", "liblocale_shim.so 已加载（RTLD_GLOBAL）")
+        // 优先用 System.loadLibrary 加载 shim：它和游戏进程里其它 JNI 库处于同一个
+        // classloader namespace，该 namespace 内的库互相可见，比 dlopen(RTLD_GLOBAL)
+        // 更可靠（实测 dlopen 的全局符号在部分 bionic 版本上不参与后续 so 的符号解析）。
+        try {
+            System.loadLibrary("locale_shim")
+            Logger.info("Launcher", "liblocale_shim.so 已加载（System.loadLibrary）")
+        } catch (t: Throwable) {
+            Logger.warning("Launcher", "System.loadLibrary(locale_shim) 失败，改用 dlopen", t)
+            if (!ZLBridge.dlopen("${PathManager.DIR_NATIVE_LIB}/liblocale_shim.so")) {
+                val reason = ZLBridge.getLastDlopenError()
+                Logger.error("Launcher", "liblocale_shim.so 加载失败：$reason")
+                LoggerBridge.appendInfo("liblocale_shim.so 加载失败，Android 8.0 以下的渲染器/音频库可能无法使用：$reason")
+            } else {
+                Logger.info("Launcher", "liblocale_shim.so 已加载（dlopen RTLD_GLOBAL）")
+            }
         }
 
         LoggerBridge.appendTitle("DLOPEN Java Runtime")
