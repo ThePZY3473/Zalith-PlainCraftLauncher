@@ -461,12 +461,21 @@ object SegmentedDownloader {
                         val scope = this
                         val segments = CopyOnWriteArrayList<Segment>()
                         val jobs = CopyOnWriteArrayList<Job>()
+                        // 在跑的连接数。切分要按「当前还有多少条连接在跑」算，不能按「一共切过多少段」：
+                        // 后者一开始就是 32，之后永远 >= 上限 —— 收尾时某条连接只剩几 MB 却慢得要死，
+                        // 也永远不会被切走。这正是「最后一点特别慢」的成因。
+                        val activeWorkers = AtomicInteger(0)
 
                         fun launchWorker(segment: Segment) {
                             segments += segment
+                            activeWorkers.incrementAndGet()
                             jobs += scope.launch(SEGMENT_DISPATCHER) {
-                                runInterruptible {
-                                    runSegment(sources, channel, segment, onBytes, bytesBySource)
+                                try {
+                                    runInterruptible {
+                                        runSegment(sources, channel, segment, onBytes, bytesBySource)
+                                    }
+                                } finally {
+                                    activeWorkers.decrementAndGet()
                                 }
                             }
                         }
@@ -505,7 +514,7 @@ object SegmentedDownloader {
                                             "no data for ${STALL_TIMEOUT_MS}ms"
                                     )
                                 }
-                                if (jobs.size >= maxSegments) continue
+                                if (activeWorkers.get() >= maxSegments) continue
                                 val candidate = segments
                                     .filter { it.remaining() >= SPLIT_MIN_REMAINING }
                                     .maxByOrNull { it.remaining() } ?: continue
@@ -523,7 +532,9 @@ object SegmentedDownloader {
                         jobs.joinAll()
                         supervisor.cancel()
                     }
-                    channel.force(true)
+                    // 不做 fsync：几百 MB 的脏页刷盘在手机上要好几秒（模拟器更久），
+                    // 表现就是「进度 99% 卡住、速度 0」。写完之后本来就要整份读回来校验
+                    // SHA-1，内容对不对由那一步负责；掉电丢数据这种极端情况按 PCL/HMCL 的做法接受。
                 }
             }
 
