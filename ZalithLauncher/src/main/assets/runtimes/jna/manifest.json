@@ -1,0 +1,147 @@
+{
+  "formatVersion": 1,
+  "component": "runtimes/jna",
+  "algorithm": "SHA-1",
+  "files": [
+    {
+      "path": "5.13.0/natives/arm64-v8a/libjnidispatch.so",
+      "size": 168176,
+      "sha1": "54852d15f9f657a24e25416fc00916b322958a2f"
+    },
+    {
+      "path": "5.13.0/natives/armeabi-v7a/libjnidispatch.so",
+      "size": 122296,
+      "sha1": "b28f927a736eb198ecd61f19d7cba83121d7fc66"
+    },
+    {
+      "path": "5.13.0/natives/x86/libjnidispatch.so",
+      "size": 120184,
+      "sha1": "62f48e3ced7f076049d9ecfd83e472a3cad83528"
+    },
+    {
+      "path": "5.13.0/natives/x86_64/libjnidispatch.so",
+      "size": 118584,
+      "sha1": "74905749c64d41b6c1bba2c97c04f48b471dfaaf"
+    },
+    {
+      "path": "5.14.0/natives/arm64-v8a/libjnidispatch.so",
+      "size": 168176,
+      "sha1": "1198a42a893b8c60108df946838f99aa7d81fe44"
+    },
+    {
+      "path": "5.14.0/natives/armeabi-v7a/libjnidispatch.so",
+      "size": 122296,
+      "sha1": "f396397c5cd0e4752d4e927de9e53748ed8c325d"
+    },
+    {
+      "path": "5.14.0/natives/x86/libjnidispatch.so",
+      "size": 120184,
+      "sha1": "a2704a18af20b6fac993689ea453ae1ffabcdd3e"
+    },
+    {
+      "path": "5.14.0/natives/x86_64/libjnidispatch.so",
+      "size": 118584,
+      "sha1": "d53549e861cc73d2ee88b6b8ce28b6036c47083a"
+    },
+    {
+      "path": "5.15.0/natives/arm64-v8a/libjnidispatch.so",
+      "size": 168280,
+      "sha1": "df31f4bd35e87bde037c89d8db964b32c58517c0"
+    },
+    {
+      "path": "5.15.0/natives/armeabi-v7a/libjnidispatch.so",
+      "size": 122372,
+      "sha1": "f2b22ae2ae0e0318ef88afc0ebaa92d14ce61704"
+    },
+    {
+      "path": "5.15.0/natives/x86/libjnidispatch.so",
+      "size": 120256,
+      "sha1": "40c96641d3554904dc9b38909e39ce846059248b"
+    },
+    {
+      "path": "5.15.0/natives/x86_64/libjnidispatch.so",
+      "size": 118688,
+      "sha1": "f33ea79f9e7b163ac8e8142fea500524bec2f09c"
+    },
+    {
+      "path": "5.16.0/natives/arm64-v8a/libjnidispatch.so",
+      "size": 168328,
+      "sha1": "9bd0c86823adaa3adc83c89d156b930a39d2d2f1"
+    },
+    {
+      "path": "5.16.0/natives/armeabi-v7a/libjnidispatch.so",
+      "size": 126496,
+      "sha1": "d415d2c9125509d6931c17f4cb444b0b67e102de"
+    },
+    {
+      "path": "5.16.0/natives/x86/libjnidispatch.so",
+      "size": 124380,
+      "sha1": "d5e7d7b678771b3ae05b65c20f9aea4ddfd998c9"
+    },
+    {
+      "path": "5.16.0/natives/x86_64/libjnidispatch.so",
+      "size": 126912,
+      "sha1": "adc6c37b3c91116da937c1b7b77135db43ca6b24"
+    },
+    {
+      "path": "5.17.0/natives/arm64-v8a/libjnidispatch.so",
+      "size": 176520,
+      "sha1": "76be189ad5dfdb4696d79d1d5ba89298e32b0daa"
+    },
+    {
+      "path": "5.17.0/natives/armeabi-v7a/libjnidispatch.so",
+      "size": 126496,
+      "sha1": "407308848037ee49a59e9b148c10c5d13147589f"
+    },
+    {
+      "path": "5.17.0/natives/x86/libjnidispatch.so",
+      "size": 124380,
+      "sha1": "973194f69ba954e9f08df4e01f0282ad0893c85a"
+    },
+    {
+      "path": "5.17.0/natives/x86_64/libjnidispatch.so",
+      "size": 126912,
+      "sha1": "731a6bede8459adb324af83bb1fe4308330fe72b"
+    },
+    {
+      "path": "5.18.0/natives/arm64-v8a/libjnidispatch.so",
+      "size": 176520,
+      "sha1": "76be189ad5dfdb4696d79d1d5ba89298e32b0daa"
+    },
+    {
+      "path": "5.18.0/natives/armeabi-v7a/libjnidispatch.so",
+      "size": 126496,
+      "sha1": "407308848037ee49a59e9b148c10c5d13147589f"
+    },
+    {
+      "path": "5.18.0/natives/x86/libjnidispatch.so",
+      "size": 124380,
+      "sha1": "973194f69ba954e9f08df4e01f0282ad0893c85a"
+    },
+    {
+      "path": "5.18.0/natives/x86_64/libjnidispatch.so",
+      "size": 126912,
+      "sha1": "731a6bede8459adb324af83bb1fe4308330fe72b"
+    },
+    {
+      "path": "5.19.1/natives/arm64-v8a/libjnidispatch.so",
+      "size": 176520,
+      "sha1": "76be189ad5dfdb4696d79d1d5ba89298e32b0daa"
+    },
+    {
+      "path": "5.19.1/natives/armeabi-v7a/libjnidispatch.so",
+      "size": 126496,
+      "sha1": "407308848037ee49a59e9b148c10c5d13147589f"
+    },
+    {
+      "path": "5.19.1/natives/x86/libjnidispatch.so",
+      "size": 124380,
+      "sha1": "973194f69ba954e9f08df4e01f0282ad0893c85a"
+    },
+    {
+      "path": "5.19.1/natives/x86_64/libjnidispatch.so",
+      "size": 126912,
+      "sha1": "731a6bede8459adb324af83bb1fe4308330fe72b"
+    }
+  ]
+}

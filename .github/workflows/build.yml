@@ -135,6 +135,11 @@ jobs:
           test -f "$ndk/source.properties"
           echo "ANDROID_NDK_HOME=$ndk" >> "$GITHUB_ENV"
 
+      # assets 组件的 SHA-1 清单（manifest.json）上游仓库不提交，需要构建时生成，
+      # 否则启动器解包 LWJGL / JNA 等组件时会因 FileNotFoundException 崩溃。
+      - name: Generate asset manifests
+        run: python3 scripts/gen-asset-manifests.py --check
+
       - name: Build APK for ${{ matrix.arch }}
         run: |
           chmod +x gradlew
