@@ -3,12 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      openal-soft 与 NG-GL4ES 这两个本地 AAR 只包含 native 库（classes.jar 为空），
-      manifest 里声明的 minSdk 26 没有对应的 Java API 依赖（.so 只链接 libc/libm/libdl/liblog
-      等基础库，openal 的 AAudio 是 dlopen 且会回退到 OpenSL ES），
+      openal-soft、NG-GL4ES、SimpleFPEWrapper 这三个本地 AAR 的 manifest 声明了 minSdk 26，
+      但它们的 classes.jar 为空，只有 native 库（.so 只链接 libc/libm/libdl/liblog 等基础库，
+      openal 的 AAudio 是 dlopen 且会回退到 OpenSL ES），没有对应的 Java API 依赖。
       因此显式允许它们在 minSdk 24 上使用，避免 manifest merger 报错。
     -->
-    <uses-sdk tools:overrideLibrary="org.angelauramc.openal_soft,com.bzlzhh.ng_gl4es" />
+    <uses-sdk tools:overrideLibrary="org.angelauramc.openal_soft,com.bzlzhh.ng_gl4es,top.mobilegl.simplefpewrapper" />
 
     <uses-feature android:glEsVersion="0x00020000" />
     <uses-feature
