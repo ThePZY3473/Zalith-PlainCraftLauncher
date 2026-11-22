@@ -61,7 +61,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import com.zalith.pcl.BuildConfig
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -131,8 +130,7 @@ private fun PclSpeedLeft() {
             val progress by task.progress.collectAsState()
             val stage by task.stage.collectAsState()
             val speed by task.rateBytesPerSec.collectAsState()
-            val totalBytes by task.totalBytes.collectAsState()
-            LiveTaskState(progress, stage, speed, totalBytes)
+            Triple(progress, stage, speed)
         }
     }
 
@@ -140,11 +138,11 @@ private fun PclSpeedLeft() {
     val progressText = if (allTasks.isEmpty()) {
         "100 %"
     } else {
-        val average = live.map { state ->
-            if (state.stage == TaskStage.COMPLETED) {
+        val average = live.map { (progress, stage, _) ->
+            if (stage == TaskStage.COMPLETED) {
                 1.0
             } else {
-                state.progress.coerceIn(0f, 1f).toDouble()
+                progress.coerceIn(0f, 1f).toDouble()
             }
         }.average()
         if (average > 0.999999) {
@@ -157,24 +155,7 @@ private fun PclSpeedLeft() {
         }
     }
 
-    val speedText = formatByteSize(live.sumOf { it.speed ?: 0L }) + "/s"
-    // 调试版：**只算单文件下载**的剩余量（整合包 zip 这类）。
-    // 批量下载不参与：引擎的快照只有「文件数」，模组的 size 经常缺失，
-    // 聚合出来的字节数不可信（之前就是恒 0 B）。批量阶段这里显示 "—"。
-    val taskRemaining = live.sumOf { state ->
-        val total = state.totalBytes
-        if (state.stage == TaskStage.COMPLETED || total <= 0L) {
-            0L
-        } else {
-            ((1f - state.progress.coerceIn(0f, 1f)) * total).toLong()
-        }
-    }
-    val hasSingleFileTask = live.any { it.totalBytes > 0L }
-    val remainingText = when {
-        !hasSingleFileTask -> "—"
-        taskRemaining > 0L -> formatByteSize(taskRemaining)
-        else -> "0 B"
-    }
+    val speedText = formatByteSize(live.sumOf { it.third ?: 0L }) + "/s"
     // 剩余文件来自下载引擎的全局进度快照；引擎没在跑时显示 "0*"（与 PCL 一致）
     val fileText = if (allTasks.isEmpty()) {
         "0"
@@ -195,13 +176,6 @@ private fun PclSpeedLeft() {
         PclSpeedBlock(PclStrings.LangSpeedSpeed, speedText)
         Spacer(Modifier.weight(0.6f))
         PclSpeedBlock(PclStrings.LangSpeedLeftFiles, fileText)
-        // 【调试版临时功能】多显示一块「剩余大小」，正式版不出现。
-        // PCL 的 PageSpeedLeft 第四块「剩余线程」也只在调试模式显示，位置一致。
-        // 排查「收尾慢」时很有用：能看出剩的是几百 KB 还是几十 MB。
-        if (BuildConfig.DEBUG) {
-            Spacer(Modifier.weight(0.6f))
-            PclSpeedBlock("剩余大小", remainingText)
-        }
         Spacer(Modifier.weight(1f))
     }
 }
@@ -442,11 +416,3 @@ private fun formatByteSize(bytes: Long): String = when {
     bytes >= 1024L -> "%.2f KiB".format(bytes / 1024.0)
     else -> "$bytes B"
 }
-
-/** 左栏用到的单个任务状态（`Triple` 装不下了，多一个总字节数） */
-private data class LiveTaskState(
-    val progress: Float,
-    val stage: TaskStage,
-    val speed: Long?,
-    val totalBytes: Long,
-)

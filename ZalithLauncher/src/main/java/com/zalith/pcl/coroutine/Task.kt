@@ -53,15 +53,6 @@ class Task private constructor(
     /** 当前速率 Bytes */
     val rateBytesPerSec = _rateBytesPerSec.asStateFlow()
 
-    private val _totalBytes = MutableStateFlow(-1L)
-    /** 这个任务一共要传多少字节（-1 表示未知）。调试版的「剩余大小」靠它算 */
-    val totalBytes = _totalBytes.asStateFlow()
-
-    /** 登记总字节数：单文件下载（整合包等）在开工前调一次 */
-    fun updateTotalBytes(bytes: Long) {
-        this._totalBytes.update { bytes }
-    }
-
     /**
      * 更新任务阶段
      */
