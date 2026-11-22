@@ -39,9 +39,12 @@ class FileDownloader(
     private val stats: DownloadStats,
     /** 收尾阶段（待下文件只剩几个）返回 true：这时并发已经塌了，小文件也值得切段 */
     private val tailBoost: () -> Boolean = { false },
+    /** 整批只剩 1~3 个文件：连 BMCLAPI 这种被禁多线程的源也放开（段数会被压低） */
+    private val lastFew: () -> Boolean = { false },
 ) {
     suspend fun download() {
         val boost = tailBoost()
+        val allowBlocked = lastFew()
         if (SegmentedDownloader.downloadOrNull(
                 urls = request.urls,
                 targetFile = request.targetFile,
@@ -62,6 +65,12 @@ class FileDownloader(
                     SegmentedDownloader.TAIL_MAX_PARALLEL_FILES
                 } else {
                     SegmentedDownloader.MAX_PARALLEL_FILES_FOR_CALLER
+                },
+                allowBlockedHosts = allowBlocked,
+                maxSegments = if (allowBlocked) {
+                    SegmentedDownloader.TAIL_BLOCKED_MAX_SEGMENTS
+                } else {
+                    SegmentedDownloader.MAX_SEGMENTS
                 },
             )
         ) {

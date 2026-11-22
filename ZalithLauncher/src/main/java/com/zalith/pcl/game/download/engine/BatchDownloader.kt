@@ -185,10 +185,14 @@ class BatchDownloader(
         var lastError: Throwable? = null
         repeat(retryRounds + 1) {
             try {
-                FileDownloader(request, stats) {
+                FileDownloader(
+                    request = request,
+                    stats = stats,
                     // 只剩几个文件时，单文件多开几段，避免并发从 32 塌到 5
-                    pendingFiles.get() <= TAIL_FILE_THRESHOLD
-                }.download()
+                    tailBoost = { pendingFiles.get() <= TAIL_FILE_THRESHOLD },
+                    // 收尾只剩一两个文件时，连 BMCLAPI 也放开（否则它单连接 70 KB/s 拖死全局）
+                    lastFew = { pendingFiles.get() <= LAST_FEW_FILE_THRESHOLD },
+                ).download()
                 onFileSuccess?.invoke(request)
                 stats.markFileFinished()
                 systemicFailureCount.set(0)
@@ -223,6 +227,9 @@ class BatchDownloader(
     companion object {
         /** 待下文件少于这个数就进入「收尾阶段」，允许小文件也分段 */
         private const val TAIL_FILE_THRESHOLD = 8
+
+        /** 只剩这么几个文件时，连 BMCLAPI 也放开分段 */
+        private const val LAST_FEW_FILE_THRESHOLD = 3
 
         private const val TAG = "BatchDownloader"
         const val DEFAULT_MAX_CONNECTIONS = 64

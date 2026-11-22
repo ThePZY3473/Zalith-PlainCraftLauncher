@@ -114,6 +114,15 @@ object SegmentedDownloader {
     const val TAIL_MAX_PARALLEL_FILES = 6
 
     /**
+     * 只剩最后几个文件时，连 BMCLAPI 也允许分段 —— 但只开很少的几条连接。
+     *
+     * 平时不给 BMCLAPI 分段是因为它按并发限流；可收尾时整批只剩 1~3 个文件，
+     * 全局并发已经从 32 掉到个位数，这时它那条单连接 70 KB/s 会拖死整个进度。
+     * 3 条连接远低于触发 429 的量级，换来的是收尾时间直接被砍掉一截。
+     */
+    const val TAIL_BLOCKED_MAX_SEGMENTS = 4
+
+    /**
      * 单个文件最多几条连接。
      *
      * 实测很多 CDN / 中转是**按连接限速**的（一条连接 20~30 KB/s），所以 12 段只能跑到
@@ -197,6 +206,8 @@ object SegmentedDownloader {
         minSegmentSize: Long = MIN_SEGMENT_SIZE,
         minTotalSize: Long = MIN_TOTAL_SIZE,
         maxParallelFiles: Int = MAX_PARALLEL_FILES,
+        /** 收尾时允许给被禁多线程的源（BMCLAPI）也分段，段数会被压到很少 */
+        allowBlockedHosts: Boolean = false,
     ): Boolean {
         if (expectedSize in 1 until minSegmentSize) return false
 
@@ -209,7 +220,7 @@ object SegmentedDownloader {
             // 【多源分流】PCL 的 TryBeginThread 让每条线程轮转着从源池里取源：慢源只拖累
             // 它手里那几段，其它连接照样跑满。以前我们是「串行试源」—— 第一个源慢就整个
             // 文件都慢，这是几百 MB 的包跑成几百 KB/s 的另一半原因。
-            val sources = collectSources(urls) ?: return false
+            val sources = collectSources(urls, allowBlockedHosts) ?: return false
             var reported = 0L
             var succeeded = false
             try {
@@ -254,7 +265,10 @@ object SegmentedDownloader {
      * 大小对不上的源直接丢掉 —— 不同大小的源拼在一起只会得到坏文件。
      * 一个都不可用才返回 null，由调用方回退到单连接。
      */
-    private suspend fun collectSources(urls: List<String>): List<Source>? {
+    private suspend fun collectSources(
+        urls: List<String>,
+        allowBlockedHosts: Boolean,
+    ): List<Source>? {
         val result = mutableListOf<Source>()
         var total = -1L
         for (candidate in urls.distinct()) {
@@ -266,8 +280,11 @@ object SegmentedDownloader {
                 continue
             }
             if (isMultiThreadBlocked(url)) {
-                Logger.info(TAG, "Multi-thread disabled for host: ${url.host}")
-                continue
+                if (!allowBlockedHosts) {
+                    Logger.info(TAG, "Multi-thread disabled for host: ${url.host}")
+                    continue
+                }
+                Logger.info(TAG, "Tail phase: allow multi-thread for ${url.host}")
             }
             val probe = probe(url) ?: continue
             if (total < 0L) total = probe.total
