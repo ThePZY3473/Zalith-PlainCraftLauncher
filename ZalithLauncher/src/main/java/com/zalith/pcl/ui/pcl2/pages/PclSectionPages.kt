@@ -2588,6 +2588,8 @@ internal fun startModpackImport(
         id = "pcl2_modpack_download/${version.platformId()}/${System.currentTimeMillis()}",
         task = { task ->
             task.updateMessage(androidText("正在下载整合包：${version.platformFileName()}"))
+            // 调试版「剩余大小」要用它：单文件下载没有批量进度快照
+            task.updateTotalBytes(total)
             var done = 0L
             // TaskStage 里没有「失败」这一档：任务体抛异常也会被收尾成 COMPLETED，
             // 结束回调分不出「下完了」和「下挂了」（超时、断网都会落到同一句
