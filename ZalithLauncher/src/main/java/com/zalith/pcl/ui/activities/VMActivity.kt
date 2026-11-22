@@ -388,6 +388,9 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
 
     private var applySizeToSurface: ((width: Int, height: Int) -> Unit)? = null
 
+    /** TextureView 是否已经报过第一帧（用于关闭「等待游戏画面」提示） */
+    private var textureFrameStarted = false
+
     private inline fun <T> withHandler(block: AbstractHandler.() -> T): T {
         return vmViewModel.session.handler.block()
     }
@@ -816,6 +819,8 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
     }
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+        // 新的一轮渲染，允许再次触发「画面已出现」
+        textureFrameStarted = false
         val nativeSurface = Surface(surface)
         voteMaxDisplayRefreshRate(nativeSurface)
         SdlBridge.prepareSurface(this, nativeSurface, gameSurfaceView?.parent as? ViewGroup, surface)
@@ -861,6 +866,14 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+        // Cleanroom + SDL 的交换缓冲不经过 native 的 swapBuffers 回调，FPS 一直是 0，
+        // 启动器也就一直显示「等待游戏画面出现」。TextureView 每帧都会走到这里，
+        // 用它当帧率来源，并在第一帧时通知游戏已经开始渲染。
+        CallbackBridge.notifyTextureFrame()
+        if (!textureFrameStarted) {
+            textureFrameStarted = true
+            withHandler { onGraphicOutput() }
+        }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {

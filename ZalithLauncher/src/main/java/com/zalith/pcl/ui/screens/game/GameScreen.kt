@@ -196,7 +196,7 @@ private class GameViewModel(
                 }.onFailure {
                     break
                 }
-                recordFps(CallbackBridge.getCurrentFps())
+                recordFps(maxOf(CallbackBridge.getCurrentFps(), CallbackBridge.getTextureFps()))
                 delay(1000L.milliseconds)
             }
         }

@@ -568,6 +568,39 @@ public class CallbackBridge {
     @Keep public static native void nativeSetGrabbing(boolean grab);
     @Keep public static native int getCurrentFps();
 
+    // ---- TextureView 帧率兜底 ----
+    // Cleanroom + SDL 的交换缓冲走的是 SDL 自己的 EGL surface，不经过 native 的
+    // swapBuffers 回调，getCurrentFps() 会一直是 0。TextureView 每次有新帧都会回调
+    // onSurfaceTextureUpdated，用它的人工计数来近似帧率。
+    private static final java.util.concurrent.atomic.AtomicInteger sTextureFrames =
+            new java.util.concurrent.atomic.AtomicInteger();
+    private static volatile long sTextureFpsWindowStart = 0L;
+    private static volatile int sTextureFpsLast = 0;
+
+    /** 由 TextureView.onSurfaceTextureUpdated 调用 */
+    public static void notifyTextureFrame() {
+        sTextureFrames.incrementAndGet();
+    }
+
+    /** 返回最近一个统计窗口内的帧率；没有新帧时沿用上一次的结果 */
+    public static int getTextureFps() {
+        long now = android.os.SystemClock.uptimeMillis();
+        long start = sTextureFpsWindowStart;
+        if (start == 0L) {
+            sTextureFpsWindowStart = now;
+            sTextureFrames.set(0);
+            return 0;
+        }
+        long elapsed = now - start;
+        if (elapsed < 1000L) {
+            return sTextureFpsLast;
+        }
+        int frames = sTextureFrames.getAndSet(0);
+        sTextureFpsLast = (int) (frames * 1000L / elapsed);
+        sTextureFpsWindowStart = now;
+        return sTextureFpsLast;
+    }
+
     private static native ByteBuffer nativeCreateGamepadButtonBuffer();
     private static native ByteBuffer nativeCreateGamepadAxisBuffer();
 
