@@ -116,6 +116,19 @@ class GameLauncher(
     }
 
     override suspend fun launch(screenSize: IntSize): Int {
+        // 诊断：确认游戏 JVM 里路径编码相关属性是否正常。sun.jnu.encoding 若不是 UTF-8，
+        // 中文存档名/中文路径会在 Java 读写文件时抛 InvalidPathException。
+        val jnuEncoding = System.getProperty("sun.jnu.encoding")
+        val nativeEncoding = System.getProperty("native.encoding")
+        val fileEncoding = System.getProperty("file.encoding")
+        val langEnv = System.getenv("LANG")
+        val lcAllEnv = System.getenv("LC_ALL")
+        Logger.info(
+            TAG,
+            "编码检查：sun.jnu.encoding=$jnuEncoding, native.encoding=$nativeEncoding, " +
+                "file.encoding=$fileEncoding, LANG=$langEnv, LC_ALL=$lcAllEnv"
+        )
+
         // 每次启动都按「版本级设置 ?: 全局设置」重新解析一次渲染器，
         // 这样用户在设置里改完渲染器后立刻生效（原来只在渲染器尚未解析时才设置，
         // 从 PCL2 界面进入的第二次启动会一直沿用上一次的结果）。

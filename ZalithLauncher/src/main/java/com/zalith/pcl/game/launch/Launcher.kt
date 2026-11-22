@@ -149,6 +149,20 @@ abstract class Launcher(
 
         ZLBridge.setLdLibraryPath(getRuntimeLibraryPath())
 
+        // JDK 18+ 的 sun.jnu.encoding 是只读的，由进程 locale 决定，-D 覆盖无效。
+        // Android 进程默认不带 LANG，bionic 的 setlocale("") 会退回 C locale，
+        // sun.jnu.encoding 于是变成 ANSI_X3.4-1968，任何非 ASCII 路径（比如中文存档名）
+        // 在 Java 侧读写时都会抛 InvalidPathException —— 实测进入「新的世界」后
+        // 服务器线程写 stats/xxx.json 时崩在这里。
+        // 必须赶在 JVM 初始化之前把 locale 设好，JVM 才会按 UTF-8 初始化。
+        runCatching {
+            Os.setenv("LANG", "C.UTF-8", true)
+            Os.setenv("LC_ALL", "C.UTF-8", true)
+            Logger.info("Launcher", "已设置进程 locale 为 C.UTF-8")
+        }.onFailure {
+            Logger.warning("Launcher", "设置进程 locale 失败", it)
+        }
+
         LoggerBridge.appendTitle("Env Map")
         setEnv(screenSize)
 
@@ -289,6 +303,9 @@ abstract class Launcher(
             put("file.encoding", "UTF-8")
             put("sun.stdout.encoding", "UTF-8")
             put("sun.stderr.encoding", "UTF-8")
+            // JDK 18+ 里 sun.jnu.encoding 由 locale 决定且只读，这里仍然写上作为兜底：
+            // 万一当前运行时还允许 -D 覆盖，就能直接解决非 ASCII 路径的问题。
+            put("sun.jnu.encoding", "UTF-8")
 
             put("cpu.name", getSocName())
 
