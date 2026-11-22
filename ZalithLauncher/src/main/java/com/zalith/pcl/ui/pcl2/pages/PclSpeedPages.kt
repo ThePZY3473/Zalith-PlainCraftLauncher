@@ -158,13 +158,9 @@ private fun PclSpeedLeft() {
     }
 
     val speedText = formatByteSize(live.sumOf { it.speed ?: 0L }) + "/s"
-    // 调试版：剩余字节数。
-    // 批量下载在跑 → 用引擎快照（准确到字节）；
-    // 单文件（整合包 / 模组）没有批量快照 → 用任务自己的 totalBytes × (1 - progress)。
-    // 以前只读批量快照，整合包下载时快照是上一条已完成批次的残留，所以一直显示 0 B。
-    val batchRemaining = batchProgress
-        ?.takeIf { it.totalFiles > 0 && it.downloadedFiles < it.totalFiles }
-        ?.let { (it.totalBytes - it.downloadedBytes).coerceAtLeast(0L) }
+    // 调试版：**只算单文件下载**的剩余量（整合包 zip 这类）。
+    // 批量下载不参与：引擎的快照只有「文件数」，模组的 size 经常缺失，
+    // 聚合出来的字节数不可信（之前就是恒 0 B）。批量阶段这里显示 "—"。
     val taskRemaining = live.sumOf { state ->
         val total = state.totalBytes
         if (state.stage == TaskStage.COMPLETED || total <= 0L) {
@@ -173,11 +169,11 @@ private fun PclSpeedLeft() {
             ((1f - state.progress.coerceIn(0f, 1f)) * total).toLong()
         }
     }
+    val hasSingleFileTask = live.any { it.totalBytes > 0L }
     val remainingText = when {
-        batchRemaining != null -> formatByteSize(batchRemaining)
+        !hasSingleFileTask -> "—"
         taskRemaining > 0L -> formatByteSize(taskRemaining)
-        allTasks.isEmpty() -> "0 B"
-        else -> "—"
+        else -> "0 B"
     }
     // 剩余文件来自下载引擎的全局进度快照；引擎没在跑时显示 "0*"（与 PCL 一致）
     val fileText = if (allTasks.isEmpty()) {
