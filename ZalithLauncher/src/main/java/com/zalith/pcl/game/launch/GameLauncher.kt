@@ -75,6 +75,7 @@ import com.zalith.pcl.utils.string.isEqualTo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
+import org.libsdl.app.SDLActivity
 import org.lwjgl.glfw.CallbackBridge
 import java.io.File
 import javax.microedition.khronos.egl.EGL10
@@ -278,6 +279,25 @@ class GameLauncher(
         Logger.info(TAG, "调用 SDL_SetMainReady + SDL_Init(0)")
         val sdlReady = ZLBridge.sdlSetMainReady()
         Logger.info(TAG, "SDL 核心初始化（SDL_SetMainReady + SDL_Init(0)）: ${if (sdlReady) "成功" else "失败"}")
+
+        // VMActivity 在游戏启动前就算好了窗口尺寸，但那时 sdlEnabled 还是 false，
+        // SDLSurface.surfaceChanged() 会直接 return，SDL 的 Android 后端拿不到尺寸，
+        // 窗口尺寸停在默认值（实测 256x256），游戏于是按 256x256 设置 glViewport，
+        // 整幅画面缩在屏幕左下角。这里赶在游戏创建 SDL 窗口之前补发一次。
+        runCatching {
+            val width = CallbackBridge.windowWidth
+            val height = CallbackBridge.windowHeight
+            val sdlSurface = SDLActivity.getSDLSurface()
+            if (sdlSurface != null && width > 0 && height > 0) {
+                sdlSurface.surfaceChanged()
+                sdlSurface.nativeResize(width, height)
+                Logger.info(TAG, "已向 SDL 补发窗口尺寸：${width}x$height")
+            } else {
+                Logger.warning(TAG, "SDL 窗口尺寸补发跳过：surface=$sdlSurface, ${width}x$height")
+            }
+        }.onFailure {
+            Logger.error(TAG, "SDL 窗口尺寸补发失败", it)
+        }
     }
 
     override fun progressFinalUserArgs(args: MutableList<String>, ramAllocation: Int) {
