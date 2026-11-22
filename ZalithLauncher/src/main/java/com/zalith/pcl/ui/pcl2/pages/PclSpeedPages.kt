@@ -61,6 +61,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import com.zalith.pcl.BuildConfig
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -156,6 +157,10 @@ private fun PclSpeedLeft() {
     }
 
     val speedText = formatByteSize(live.sumOf { it.third ?: 0L }) + "/s"
+    // 调试版：剩余字节数（总量 - 已下），引擎没给快照时显示 "—"
+    val remainingText = batchProgress?.let { progress ->
+        formatByteSize((progress.totalBytes - progress.downloadedBytes).coerceAtLeast(0L))
+    } ?: "—"
     // 剩余文件来自下载引擎的全局进度快照；引擎没在跑时显示 "0*"（与 PCL 一致）
     val fileText = if (allTasks.isEmpty()) {
         "0"
@@ -176,6 +181,13 @@ private fun PclSpeedLeft() {
         PclSpeedBlock(PclStrings.LangSpeedSpeed, speedText)
         Spacer(Modifier.weight(0.6f))
         PclSpeedBlock(PclStrings.LangSpeedLeftFiles, fileText)
+        // 【调试版临时功能】多显示一块「剩余大小」，正式版不出现。
+        // PCL 的 PageSpeedLeft 第四块「剩余线程」也只在调试模式显示，位置一致。
+        // 排查「收尾慢」时很有用：能看出剩的是几百 KB 还是几十 MB。
+        if (BuildConfig.DEBUG) {
+            Spacer(Modifier.weight(0.6f))
+            PclSpeedBlock("剩余大小", remainingText)
+        }
         Spacer(Modifier.weight(1f))
     }
 }
