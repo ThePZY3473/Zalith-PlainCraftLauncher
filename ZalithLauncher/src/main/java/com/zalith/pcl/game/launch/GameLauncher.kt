@@ -55,6 +55,8 @@ import com.zalith.pcl.game.plugin.driver.DriverPluginManager
 import com.zalith.pcl.game.plugin.renderer.RendererPluginManager
 import com.zalith.pcl.game.renderer.RendererCompat
 import com.zalith.pcl.game.renderer.Renderers
+import com.zalith.pcl.game.renderer.getSfpewLibraryPath
+import com.zalith.pcl.game.renderer.isSfpewEnabledFor
 import com.zalith.pcl.game.renderer.renderers.GL4ESRenderer
 import com.zalith.pcl.game.renderer.renderers.NGGL4ESRenderer
 import com.zalith.pcl.game.sdl.SdlBridge
@@ -226,7 +228,7 @@ class GameLauncher(
             }
         }
         if (Renderers.isCurrentRendererValid()) {
-            setRendererEnv(envMap)
+            setRendererEnv(envMap, version)
         }
         envMap["ZALITH_VERSION_CODE"] = BuildConfig.VERSION_CODE.toString()
 
@@ -316,7 +318,8 @@ class GameLauncher(
     override fun progressFinalUserArgs(args: MutableList<String>, ramAllocation: Int) {
         super.progressFinalUserArgs(args, version.getRamAllocation(activity))
         if (Renderers.isCurrentRendererValid()) {
-            args.add("-Dorg.lwjgl.opengl.libname=${getRendererLibrary()}")
+            // 启用 SFPEW 时这里也要指到兼容层，否则 LWJGL 会绕过它直接加载渲染器
+            args.add("-Dorg.lwjgl.opengl.libname=${getGameRendererLibrary(version)}")
         }
     }
 
@@ -633,7 +636,7 @@ private fun checkAndUsedJSPH(envMap: MutableMap<String, String>, runtime: Runtim
     }
 }
 
-private fun setRendererEnv(envMap: MutableMap<String, String>) {
+private fun setRendererEnv(envMap: MutableMap<String, String>, version: Version) {
     val renderer = Renderers.getCurrentRenderer()
     val rendererId = renderer.getRendererId()
 
@@ -663,6 +666,21 @@ private fun setRendererEnv(envMap: MutableMap<String, String>) {
     }
 
     envMap["POJAV_RENDERER"] = rendererId
+
+    // SimpleFPEWrapper 兼容层：把 SDL 的 GL/EGL 入口都换成 SFPEW，
+    // 由它内部按 SFPEW_EGL 去加载真正的渲染器；SFPEW_LAYER 是它自己的开关。
+    if (isSfpewEnabledFor(renderer, version)) {
+        envMap["SFPEW_LAYER"] = "1"
+        envMap["SFPEW_EGL"] = envMap["SDL_EGL_LIBRARY"]
+            ?: envMap["POJAVEXEC_EGL"]
+            ?: "libEGL.so"
+        if (version.isSfpewRelaxedContextEnabled()) {
+            envMap["SFPEW_RELAXED_CONTEXT"] = "1"
+        }
+        val sfpewLibraryPath = getSfpewLibraryPath()
+        envMap["SDL_OPENGL_LIBRARY"] = sfpewLibraryPath
+        envMap["SDL_EGL_LIBRARY"] = sfpewLibraryPath
+    }
 
     if (RendererPluginManager.selectedRendererPlugin != null) return
 
@@ -697,6 +715,17 @@ private fun setRendererEnv(envMap: MutableMap<String, String>) {
 private fun getRendererLibrary(): String? {
     return if (!Renderers.isCurrentRendererValid()) null
     else Renderers.getCurrentRenderer().getRendererLibrary()
+}
+
+/** 传给游戏进程的 GL 库：启用 SFPEW 时指向兼容层，否则回到渲染器自己的库。 */
+private fun getGameRendererLibrary(version: Version): String? {
+    if (!Renderers.isCurrentRendererValid()) return null
+    val renderer = Renderers.getCurrentRenderer()
+    return if (isSfpewEnabledFor(renderer, version)) {
+        getSfpewLibraryPath()
+    } else {
+        renderer.getRendererLibrary()
+    }
 }
 
 /**
