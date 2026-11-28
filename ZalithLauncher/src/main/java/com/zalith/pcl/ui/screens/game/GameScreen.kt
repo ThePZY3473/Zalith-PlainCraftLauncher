@@ -1020,7 +1020,7 @@ private fun MouseControlLayout(
             onMouse = onMouseMoved,
             gamepadViewModel = gamepadViewModel,
             onTap = { position ->
-                val gamePosition = currentGameDisplayLayout(screenSize).mapToGame(position)
+                val gamePosition = position.toGameWindowPosition(screenSize)
                 CallbackBridge.putMouseEventWithCoords(LwjglGlfwKeycode.GLFW_MOUSE_BUTTON_LEFT.toInt(), gamePosition.x, gamePosition.y)
             },
             onCapturedTap = {
@@ -1071,7 +1071,36 @@ private fun MouseControlLayout(
     }
 }
 
+/** 上次打印坐标映射日志的时间，用于节流（指针每帧都会更新）。 */
+private var lastMouseMapLogAt = 0L
+
+/**
+ * 触控层坐标 → GLFW 实际窗口坐标（窗口尺寸由 native 回传）。
+ *
+ * 触控层用的是 Compose 的屏幕尺寸，而游戏窗口可能被缩放成其他尺寸；
+ * 直接按 displaySize 换算会整体偏移，越靠边越明显。
+ */
+private fun Offset.toGameWindowPosition(screenSize: IntSize): Offset {
+    val layout = currentGameDisplayLayout(screenSize)
+    val windowWidth = CallbackBridge.windowWidth
+    val windowHeight = CallbackBridge.windowHeight
+    val gamePosition = layout.mapToWindow(this, windowWidth, windowHeight)
+
+    val now = System.currentTimeMillis()
+    if (now - lastMouseMapLogAt >= 1000L) {
+        lastMouseMapLogAt = now
+        Logger.info(
+            "MouseMap",
+            "touch=(${x.toInt()},${y.toInt()}) display=${layout.displaySize} " +
+                "render=${layout.renderSize} window=${windowWidth}x${windowHeight} " +
+                "offset=${layout.offset} game=(${gamePosition.x.toInt()},${gamePosition.y.toInt()})"
+        )
+    }
+
+    return gamePosition
+}
+
 private fun Offset.sendPosition(screenSize: IntSize) {
-    val gamePosition = currentGameDisplayLayout(screenSize).mapToGame(this)
+    val gamePosition = toGameWindowPosition(screenSize)
     CallbackBridge.sendCursorPos(gamePosition.x, gamePosition.y)
 }
