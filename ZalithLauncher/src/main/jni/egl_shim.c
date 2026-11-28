@@ -82,13 +82,18 @@ static void *real_sym(const char *name)
     return dlsym(handle, name);
 }
 
-static PFNEGLGETPROCADDRESSPROC g_real_get_proc_address;
+/* NDK 25 的 EGL 头里没有 PFNEGLGETPROCADDRESSPROC（被 EGL_EGL_PROTOTYPES
+ * 包住），这里按相同签名自行定义 */
+typedef __eglMustCastToProperFunctionPointerType
+        (EGLAPIENTRYP eglshim_get_proc_address_t)(const char *procname);
 
-static PFNEGLGETPROCADDRESSPROC real_get_proc_address(void)
+static eglshim_get_proc_address_t g_real_get_proc_address;
+
+static eglshim_get_proc_address_t real_get_proc_address(void)
 {
     if (g_real_get_proc_address == NULL) {
         g_real_get_proc_address =
-                (PFNEGLGETPROCADDRESSPROC) real_sym("eglGetProcAddress");
+                (eglshim_get_proc_address_t) real_sym("eglGetProcAddress");
     }
     return g_real_get_proc_address;
 }
@@ -118,7 +123,7 @@ static eglshim_gl_get_integerv_t real_gl_get_integer_v(void)
     }
     g_real_gl_get_integer_v_tried = 1;
 
-    PFNEGLGETPROCADDRESSPROC get_proc = real_get_proc_address();
+    eglshim_get_proc_address_t get_proc = real_get_proc_address();
     if (get_proc != NULL) {
         g_real_gl_get_integer_v =
                 (eglshim_gl_get_integerv_t) get_proc("glGetIntegerv");
@@ -166,7 +171,7 @@ eglGetProcAddress(const char *procname)
         return (__eglMustCastToProperFunctionPointerType) glGetIntegerv;
     }
 
-    PFNEGLGETPROCADDRESSPROC real = real_get_proc_address();
+    eglshim_get_proc_address_t real = real_get_proc_address();
     if (real == NULL) {
         return NULL;
     }
@@ -266,7 +271,7 @@ EGL_SHIM(EGLBoolean, eglReleaseTexImage,
 EGL_SHIM(EGLBoolean, eglSurfaceAttrib,
          (EGLDisplay dpy, EGLSurface surface, EGLint attribute, EGLint value),
          (dpy, surface, attribute, value))
-EGL_SHIM(EGLint, eglQueryAPI, (void), ())
+EGL_SHIM(EGLenum, eglQueryAPI, (void), ())
 EGL_SHIM(EGLBoolean, eglCopyBuffers,
          (EGLDisplay dpy, EGLSurface surface, EGLNativePixmapType target),
          (dpy, surface, target))
@@ -280,7 +285,7 @@ EGL_SHIM(EGLBoolean, eglDestroySyncKHR, (EGLDisplay dpy, EGLSyncKHR sync),
 EGL_SHIM(EGLint, eglClientWaitSyncKHR,
          (EGLDisplay dpy, EGLSyncKHR sync, EGLint flags, EGLTimeKHR timeout),
          (dpy, sync, flags, timeout))
-EGL_SHIM(EGLBoolean, eglWaitSyncKHR,
+EGL_SHIM(EGLint, eglWaitSyncKHR,
          (EGLDisplay dpy, EGLSyncKHR sync, EGLint flags), (dpy, sync, flags))
 EGL_SHIM(EGLBoolean, eglGetSyncAttribKHR,
          (EGLDisplay dpy, EGLSyncKHR sync, EGLint attribute, EGLint *value),
