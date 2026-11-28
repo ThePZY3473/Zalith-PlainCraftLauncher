@@ -50,13 +50,26 @@ git diff upstream/main -- README.md NOTICE.md
    注意保留原文里的空格和标点（`APK ，` 那个空格是现状，别顺手"修"掉，
    否则每次 diff 都会多出一行噪音）。
 
-4. **「## 已知限制」两条**
+4. **「## 下载」章节**
+   上游原文主推 「GitHub Releases + 官网 zpcl.fun 镜像」并附五架构下载表，
+   本 fork 整章改写成 GitHub Actions 产物说明：
+
+   > ## 下载
+   >
+   > 本仓库**不发布 GitHub Release**，APK 只作为 GitHub Actions 的构建产物提供……
+   > （后面是下载步骤、`debug apk (arm64)` 产物表、如何手动跑其他架构）
+
+   同时全文两处「不上传 APK」的说法要一起改：
+   - 目录表里 `.github/workflows/` 那行 → 「做 Debug 编译校验并上传 Debug APK 产物」
+   - 「关于 CI」段落 → 「编译产物以 `debug apk (<架构>)` 的名义上传到运行记录的 Artifacts」
+
+5. **「## 已知限制」两条**
    - `- CurseForge 官方接口需要 \`x-api-key\`，未内置时只能使用 Modrinth 或镜像`
      行尾追加 `（现在没有hh）`
    - `- 开发线默认未配置微软登录 Client ID，离线和第三方认证不受影响。`
      改成 `- 开发线默认未配置微软登录 Client ID，离线和第三方认证不受影响（现在没有hh）（当然可以用账号管理模组进行替代）。`
 
-5. **文末「## 关于本fork」章节**
+6. **文末「## 关于本fork」章节**
    在「许可与致谢」之后加一条 `---` 分隔线，再接下面这段原文：
 
    ```markdown
@@ -100,6 +113,26 @@ git diff upstream/main -- README.md NOTICE.md
   26 的硬编码也要一起改。上游同步后跑一次 `grep -rn "minSdk 26" .` 确认没有漏网。
 - 本 fork 的 `AndroidManifest.xml` 里有一句 `tools:overrideLibrary` 覆盖
   openal-soft / NG-GL4ES / SimpleFPEWrapper 的 minSdk 26 声明，这段注释不要删。
+- 上游 `FileSink.kt` 用的是 `targetFile.toPath()`，本 fork 必须改成
+  `Paths.get(targetFile.path)`：Android 7（API 25）的 `java.io.File` 没有 `toPath()`，
+  而 desugar 不重写平台类。每次同步后 `grep -rn "\.toPath()" ZalithLauncher/src/main/java`
+  复查（`LibraryComponents.toPath()` 是本仓库自己的扩展，返回 String，不算）。
+
+## MobileGL 渲染器（2026-11 同步 v1.5.6 时引入）
+
+- `libMobileGL.so` 只有 `arm64-v8a` 一份（17 MB，NDK 27 单进程构建）。`Renderers.init`
+  里按 `Build.SUPPORTED_ABIS` 判断，非 arm64 环境不注册这个渲染器，避免选中后 dlopen 失败。
+- 原始 so 引用了 `nl_langinfo@LIBC_O` 与 `pthread_getname_np@LIBC_O`（Android 8+），
+  Android 7 上加载会失败。本 fork 已就地 patch：
+  ```bash
+  python3 scripts/patch-aar-elf.py ZalithLauncher/src/main/jniLibs/arm64-v8a/libMobileGL.so \
+      --symbol nl_langinfo --symbol pthread_getname_np --needed liblog.so=libshm.so
+  ```
+  - `--symbol`：把符号版本降到 `VER_NDX_GLOBAL`，让 `libshm.so` 的 shim 能解析；
+  - `--needed`：`liblog.so` → `libshm.so`（名字等长；`libshm` 自己依赖 `liblog`，
+    `__android_log_print` 仍能解析）。
+  - `__write_chk@LIBC_N` 是 API 24 就有，不用处理。
+- 上游如果更新了 `libMobileGL.so`，上面这条命令要重跑一次，否则 Android 7 上再次加载失败。
 
 ## 其他注意
 
