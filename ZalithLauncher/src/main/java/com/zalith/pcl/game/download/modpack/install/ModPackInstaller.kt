@@ -20,6 +20,7 @@ package com.zalith.pcl.game.download.modpack.install
 
 import android.content.Context
 import com.zalith.pcl.R
+import com.zalith.pcl.ui.pcl2.PclDialogHost
 import com.zalith.pcl.coroutine.Task
 import com.zalith.pcl.coroutine.TaskFlowExecutor
 import com.zalith.pcl.coroutine.TaskLogOutput
@@ -171,6 +172,8 @@ class ModPackInstaller(
                     fun updateProgress() {
                         task.updateProgress((downloadedSize.toDouble() / totalFileSize).toFloat())
                     }
+                    // 安装器动辄几百 MB：把大小告诉引擎，才能走分段并行，否则只能单连接爬
+                    val expectedSize = version.platformFileSize()
                     withSpeedReport(
                         onSpeedReport = { bytes ->
                             task.updateSpeed(bytes)
@@ -185,6 +188,7 @@ class ModPackInstaller(
                                 .mapMCIMMirrorUrls(),
                             sha1 = version.platformSha1(),
                             outputFile = installerFile,
+                            expectedSize = expectedSize,
                             sizeCallback = { size ->
                                 downloadedSize += size
                                 updateProgress()
@@ -235,6 +239,19 @@ class ModPackInstaller(
                 ) { task ->
                     val downloadTask = ModDownloader(modpackInfo.files)
                     downloadTask.startDownload(task)
+                    // 有模组被跳过时，装完之后给一次明确提示（不再静默少模组）
+                    val skipped = downloadTask.skippedNames
+                    if (skipped.isNotEmpty()) {
+                        PclDialogHost.show(
+                            title = "已跳过 ${skipped.size} 个模组",
+                            content = buildString {
+                                append("以下模组在下载源上不可用，本次未下载：\n")
+                                skipped.take(8).forEach { append("· $it\n") }
+                                if (skipped.size > 8) append("……另有 ${skipped.size - 8} 个，详见日志。\n")
+                                append("\n游戏可正常启动，缺少这些模组可能影响整合包内容。")
+                            }
+                        )
+                    }
                 }
 
                 //分析并匹配模组加载器信息，并构造出游戏安装信息

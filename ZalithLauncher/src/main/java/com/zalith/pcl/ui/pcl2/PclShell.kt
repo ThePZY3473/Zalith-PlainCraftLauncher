@@ -792,6 +792,15 @@ private fun PclMainContent(
                 onDismiss = { runtime.dismissError() },
             )
         }
+
+        // 后台任务主动推送的提示框（整合包安装结束后报告跳过的模组等）
+        PclDialogHost.notice?.let { notice ->
+            PclNoticeDialog(
+                title = notice.title,
+                content = notice.content,
+                onDismiss = { PclDialogHost.dismiss() },
+            )
+        }
     }
 }
 
@@ -1602,6 +1611,23 @@ private fun PclScrollBar(
 /* ============================================================================
  *  左下角提示条 / 右下角悬浮按钮
  * ==========================================================================*/
+
+/** 供后台任务推送一次性对话框（例如整合包安装结束时报告跳过的模组）。 */
+object PclDialogHost {
+    data class Notice(val title: String, val content: String)
+
+    private val current = mutableStateOf<Notice?>(null)
+
+    val notice: Notice? get() = current.value
+
+    fun show(title: String, content: String) {
+        current.value = Notice(title, content)
+    }
+
+    fun dismiss() {
+        current.value = null
+    }
+}
 
 /** 供页面推送提示条（对应 PCL 的 `Hint` 机制）。 */
 object PclHintHost {

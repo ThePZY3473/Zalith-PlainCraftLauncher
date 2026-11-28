@@ -130,6 +130,7 @@ import com.zalith.pcl.game.account.getAccountTypeName
 import com.zalith.pcl.game.account.isLocalAccount
 import com.zalith.pcl.game.account.isMicrosoftAccount
 import com.zalith.pcl.game.account.isMicrosoftLogging
+import com.zalith.pcl.game.account.uploadSkinToServer
 import com.zalith.pcl.game.account.microsoftLogin
 import com.zalith.pcl.game.account.wardrobe.SkinModelType
 import com.zalith.pcl.game.account.wardrobe.SkinType
@@ -944,6 +945,9 @@ private fun rememberSkinImporter(
                             // profileId 是离线 UUID，改了等于换了一个账户，
                             // 已有存档/统计会跟它对不上。模型只影响渲染与 yggdrasil 的 model 字段。
                             ask.account.skinModelType = model
+                            // 关键：把皮肤推到服务端。只写本地的话，正版进游戏仍是旧皮肤，
+                            // 第三方点「刷新」会被服务端旧图覆盖回去。
+                            ask.account.uploadSkinToServer(skinFile, model)
                             null
                         }.getOrElse { it.message ?: it.javaClass.simpleName }
                     }
@@ -956,7 +960,13 @@ private fun rememberSkinImporter(
                             PclHintTheme.Green,
                         )
                     } else {
-                        PclHintHost.push("换皮肤失败：$error", PclHintTheme.Red)
+                        // 本地已经写入，上传失败时区分开说，避免用户以为完全没生效
+                        AccountsManager.refreshWardrobe()
+                        onImported()
+                        PclHintHost.push(
+                            "皮肤已存到本地，但上传到服务器失败：$error。游戏内可能仍显示旧皮肤。",
+                            PclHintTheme.Red,
+                        )
                     }
                 }
             },

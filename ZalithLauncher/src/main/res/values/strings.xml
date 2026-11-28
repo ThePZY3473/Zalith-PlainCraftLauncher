@@ -3107,4 +3107,14 @@
     <string name="settings_launcher_animate_extent_summary">Adjust the intensity of the launcher animations</string>
     <string name="settings_launcher_swap_animate_type_title">Transition Animation</string>
     <string name="settings_launcher_swap_animate_type_summary">Choose the page transition animation that best suits your preferences</string>
+    <string name="renderer_mobilegl_backend_title">Graphics backend</string>
+    <string name="renderer_mobilegl_backend_desc">Espryt translates to OpenGL ES; Magma translates to Vulkan. Try Espryt first, switch to Magma if you see broken rendering.</string>
+    <string name="renderer_mobilegl_backend_gles">Espryt (OpenGL ES)</string>
+    <string name="renderer_mobilegl_backend_gles_desc">Most compatible choice; works on nearly all Adreno / Mali drivers.</string>
+    <string name="renderer_mobilegl_backend_vulkan">Magma (Vulkan)</string>
+    <string name="renderer_mobilegl_backend_vulkan_desc">Lower overhead through Vulkan; requires a working Vulkan driver.</string>
+    <string name="renderer_mobilegl_timerquery_title">Disable timer query</string>
+    <string name="renderer_mobilegl_timerquery_desc">Turns off GPU timer queries. Keeps some drivers from stalling when shaders or resource packs query timings.</string>
+    <string name="renderer_mobilegl_relaxed_title">Relaxed semantics</string>
+    <string name="renderer_mobilegl_relaxed_desc">Skips some strict GL state validation. Can fix rendering of poorly written mods, but may hide real errors.</string>
 </resources>

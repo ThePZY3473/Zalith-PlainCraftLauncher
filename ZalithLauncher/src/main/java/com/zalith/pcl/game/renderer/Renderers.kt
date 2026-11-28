@@ -27,9 +27,11 @@
 
 package com.zalith.pcl.game.renderer
 
+import android.os.Build
 import com.zalith.pcl.game.renderer.renderers.FreedrenoRenderer
 import com.zalith.pcl.game.renderer.renderers.GL4ESRenderer
 import com.zalith.pcl.game.renderer.renderers.KopperZinkRenderer
+import com.zalith.pcl.game.renderer.renderers.MobileGLRenderer
 import com.zalith.pcl.game.renderer.renderers.MobileGluesRenderer
 import com.zalith.pcl.game.renderer.renderers.NGGL4ESRenderer
 import com.zalith.pcl.game.renderer.renderers.PanfrostRenderer
@@ -58,13 +60,18 @@ object Renderers {
         }
 
         addRenderers(
-            NGGL4ESRenderer,
-            GL4ESRenderer,
-            KopperZinkRenderer,
-            MobileGluesRenderer,
-            VirGLRenderer,
-            FreedrenoRenderer,
-            PanfrostRenderer
+            *buildList {
+                add(NGGL4ESRenderer)
+                add(GL4ESRenderer)
+                add(KopperZinkRenderer)
+                add(MobileGluesRenderer)
+                // libMobileGL.so 只有 arm64-v8a 一份（上游 17 MB 的单进程构建），
+                // 其他架构上注册进来，用户选中后会 dlopen 失败，所以按 ABI 跳过。
+                if (Build.SUPPORTED_ABIS.any { it == "arm64-v8a" }) add(MobileGLRenderer)
+                add(VirGLRenderer)
+                add(FreedrenoRenderer)
+                add(PanfrostRenderer)
+            }.toTypedArray()
         )
     }
 

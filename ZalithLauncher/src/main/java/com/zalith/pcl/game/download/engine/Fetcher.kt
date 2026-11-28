@@ -372,8 +372,11 @@ object Fetcher {
         val contentLength = response.headerAsLong("content-length")
         val contentEncoding = ContentEncoding.fromHeaders(response)
 
+        // 小文件（≤1 MB、无压缩）直接攒内存：省掉「临时文件 + rename」两次元数据操作
+        val memorySink = contentEncoding == ContentEncoding.IDENTITY &&
+            contentLength in 1..MEMORY_SINK_LIMIT
         if (state.sink == null) {
-            state.sink = FileSink(targetFile, sha1)
+            state.sink = FileSink(targetFile, sha1, memoryMode = memorySink)
             state.resume = ResumeContext.of(response)
         } else if (resumeRequested) {
             if (state.resume!!.canResume(code, response)) {
@@ -386,7 +389,7 @@ object Fetcher {
             }
         } else {
             state.discardSink()
-            state.sink = FileSink(targetFile, sha1)
+            state.sink = FileSink(targetFile, sha1, memoryMode = memorySink)
             state.resume = ResumeContext.of(response)
         }
 

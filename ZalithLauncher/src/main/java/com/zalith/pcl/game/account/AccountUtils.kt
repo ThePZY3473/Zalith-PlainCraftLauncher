@@ -41,6 +41,7 @@ import com.zalith.pcl.game.account.auth_server.data.AuthServer
 import com.zalith.pcl.game.account.auth_server.getAuthServeInfo
 import com.zalith.pcl.game.account.microsoft.AsyncStatus
 import com.zalith.pcl.game.account.microsoft.AuthType
+import com.zalith.pcl.game.account.microsoft.MINECRAFT_SERVICES_URL
 import com.zalith.pcl.game.account.microsoft.MinecraftProfileException
 import com.zalith.pcl.game.account.microsoft.NotPurchasedMinecraftException
 import com.zalith.pcl.game.account.microsoft.XboxLoginException
@@ -48,6 +49,9 @@ import com.zalith.pcl.game.account.microsoft.fetchDeviceCodeResponse
 import com.zalith.pcl.game.account.microsoft.getTokenResponse
 import com.zalith.pcl.game.account.microsoft.microsoftAuthAsync
 import com.zalith.pcl.game.account.microsoft.toLocal
+import com.zalith.pcl.game.account.wardrobe.SkinModelType
+import com.zalith.pcl.game.account.yggdrasil.executeWithAuthorization
+import com.zalith.pcl.game.account.yggdrasil.uploadSkin
 import com.zalith.pcl.path.DOWNLOAD_OKHTTP_CLIENT
 import com.zalith.pcl.path.URL_USER_AGENT
 import com.zalith.pcl.ui.AndroidStringText
@@ -60,6 +64,7 @@ import com.zalith.pcl.viewmodel.ErrorViewModel
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import okhttp3.Request
 import okhttp3.Response
@@ -67,6 +72,7 @@ import org.json.JSONObject
 import java.net.ConnectException
 import java.net.UnknownHostException
 import java.nio.channels.UnresolvedAddressException
+import java.io.File
 import java.util.Locale
 import java.util.Objects
 import java.util.UUID
@@ -280,8 +286,7 @@ fun microsoftRefresh(
 suspend fun Account.refreshMicrosoft(
     task: Task,
     coroutineContext: CoroutineContext = Dispatchers.IO
-) {
-    val newAcc = microsoftAuth(
+) {    val newAcc = microsoftAuth(
         AuthType.Refresh,
         refreshToken,
         accessToken,
@@ -296,6 +301,47 @@ suspend fun Account.refreshMicrosoft(
         this.username = newAcc.username
         this.refreshToken = newAcc.refreshToken
         this.xUid = newAcc.xUid
+    }
+}
+
+/**
+ * 把换好的皮肤同步到服务端。
+ *
+ * 之前 PCL 界面的换肤只写了本地 PNG：正版进游戏读的是 Mojang 那边的皮肤，所以「换了不显示」；
+ * 第三方点一次「刷新」又会把服务端旧皮肤拉回来覆盖本地，所以「切换后刷新就没了」。
+ * 这里补上上传这一步，本地文件仍是展示用的副本。
+ *
+ * 离线账号没有服务端，直接返回。
+ *
+ * @throws Throwable 上传失败时抛出，调用方负责提示；本地文件已写入，不会因此丢失
+ */
+suspend fun Account.uploadSkinToServer(file: File, model: SkinModelType) {
+    when {
+        isMicrosoftAccount() -> executeWithAuthorization(
+            block = { uploadSkin(MINECRAFT_SERVICES_URL, accessToken, file, model) },
+            onRefreshRequest = {
+                // 令牌过期：刷新一次再重传，与原生界面 uploadMicrosoftSkin 的做法一致
+                val refreshed = microsoftAuthAsync(
+                    authType = AuthType.Refresh,
+                    refreshToken = refreshToken,
+                    accessToken = accessToken,
+                    context = currentCoroutineContext(),
+                    statusUpdate = {},
+                )
+                accessToken = refreshed.accessToken
+                refreshToken = refreshed.refreshToken
+                clientToken = refreshed.clientToken
+                xUid = refreshed.xUid
+                AccountsManager.suspendSaveAccount(this)
+            }
+        )
+
+        isAuthServerAccount() -> uploadSkin(
+            apiUrl = otherBaseUrl!!.removeSuffix("/"),
+            accessToken = accessToken,
+            file = file,
+            modelType = model,
+        )
     }
 }
 

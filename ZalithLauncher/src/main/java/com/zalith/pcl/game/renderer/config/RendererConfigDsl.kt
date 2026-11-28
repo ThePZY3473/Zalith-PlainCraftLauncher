@@ -70,7 +70,13 @@ class RendererConfigSpecBuilder {
     ) {
         val optionList = RendererChoiceBuilder().apply(options).options
         require(optionList.isNotEmpty()) { "Choice entry $id must provide options" }
+        // 两种写法都要支持：
+        //   · `option(0, ...)` —— 选项值是整数，`default = 0` 直接对得上；
+        //   · `option("DirectGLES", ...)` —— 选项值是字符串，此时 `default` 只能按**下标**理解。
+        // 之前只做字符串比对，MobileGL 那边就是「字符串选项 + default = 0」，
+        // 于是在 class init 阶段抛 IllegalStateException，整个启动器一进主界面就崩。
         val defaultValue = optionList.find { it.value.asString() == default.toString() }?.value
+            ?: optionList.getOrNull(default)?.value
         requireNotNull(defaultValue) { "Choice entry $id does not contain its default value" }
         entry(
             SingleChoiceEntry(

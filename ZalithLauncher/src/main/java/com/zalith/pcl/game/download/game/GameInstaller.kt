@@ -653,6 +653,52 @@ class GameInstaller(
     }
 
     /**
+     * 临时目录里的原版 Json 到底能不能用。
+     *
+     * 只判「文件存在 + 大小大于 0」是不够的：下载镜像返回的错误页、带 BOM 的响应
+     * 都会让下载任务「成功」，但 `getJsonOrNull` 里那句 `startsWith("{")` 读不过去，
+     * 合并阶段就变成「Minecraft 版本 Json 缺失」——看起来像文件被删了，其实是内容不对。
+     * 这里去掉 BOM 和前导空白，再确认首尾是 `{` `}`。
+     */
+    private fun isVanillaJsonUsable(json: File): Boolean {
+        if (!json.isFile || json.length() <= 0L) return false
+        return runCatching {
+            val text = json.readText().trim('\uFEFF', ' ', '\n', '\r', '\t')
+            text.startsWith("{") && text.endsWith("}")
+        }.getOrDefault(false)
+    }
+
+    /**
+     * 合并版本 Json 之前的兜底：临时目录里的原版 Json 不可用就当场重下一次。
+     *
+     * 走到合并这一步说明下载任务都「成功」了，文件却不能用 —— 无论是被谁清掉的，
+     * 还是镜像给了一份坏内容，都在这里补回来，而不是让用户看到一句无从下手的报错。
+     */
+    private suspend fun ensureVanillaJson(clientDir: File) {
+        val json = File(clientDir, "${clientDir.name}.json")
+        if (isVanillaJsonUsable(json)) return
+        Logger.warning(
+            TAG,
+            "Vanilla json unusable before merge (exists=${json.exists()}, size=${json.length()}): ${json.absolutePath}"
+        )
+        json.delete()
+        val version = downloader.findVersion(info.gameVersion)
+            ?: throw IllegalStateException("版本清单中找不到 ${info.gameVersion}")
+        downloader.createVersionJson(
+            version = version,
+            targetVersion = info.gameVersion,
+            mcFolder = clientDir.parentFile ?: clientDir
+        )
+        if (!isVanillaJsonUsable(json)) {
+            val head = runCatching { json.readText().take(80) }.getOrDefault("")
+            throw IllegalStateException(
+                "原版版本 Json 无法使用：${json.absolutePath}（大小 ${json.length()} 字节，开头：$head）"
+            )
+        }
+        Logger.info(TAG, "Vanilla json restored before merge: ${json.absolutePath}")
+    }
+
+    /**
      * 安装失败、取消安装时，都应该清除目标客户端版本文件夹
      */
     private fun clearTargetClient() {
@@ -710,6 +756,43 @@ class GameInstaller(
         ).forEach { phased ->
             addTask(title = phased.title, icon = null, task = phased.task)
         }
+
+        // 原版 Json 是后面合并版本信息的唯一依据：它没落盘时，合并阶段只会抛
+        // 「Minecraft 版本 Json 缺失」，用户看到的是安装到一半失败。
+        // 这里在下载任务之后补一道校验，缺了就当场重下一次，把失败点提前到这一步。
+        addTask(
+            title = androidText(R.string.download_game_install_base_download_file2, info.gameVersion),
+            icon = null,
+            task = Task.runTask(
+                id = "Download.Vanilla.JsonVerify",
+                dispatcher = Dispatchers.IO,
+                task = { task ->
+                    task.updateProgress(-1f)
+                    val json = File(File(tempVersionsDir, info.gameVersion), "${info.gameVersion}.json")
+                    if (isVanillaJsonUsable(json)) return@runTask
+                    Logger.warning(
+                        TAG,
+                        "Vanilla version json unusable after download " +
+                            "(exists=${json.exists()}, size=${json.length()}), retrying: ${json.absolutePath}"
+                    )
+                    json.delete()
+                    val version = downloader.findVersion(info.gameVersion)
+                        ?: throw IllegalStateException("版本清单中找不到 ${info.gameVersion}")
+                    downloader.createVersionJson(
+                        version = version,
+                        targetVersion = info.gameVersion,
+                        mcFolder = tempVersionsDir
+                    )
+                    if (!isVanillaJsonUsable(json)) {
+                        val head = runCatching { json.readText().take(80) }.getOrDefault("")
+                        throw IllegalStateException(
+                            "原版版本 Json 下载失败：${json.absolutePath}" +
+                                "（大小 ${json.length()} 字节，开头：$head）"
+                        )
+                    }
+                }
+            )
+        )
     }
 
     /**
@@ -927,6 +1010,7 @@ class GameInstaller(
         task = { task ->
             //合并版本 Json
             task.updateProgress(0.1f)
+            ensureVanillaJson(tempClientDir)
             mergeGameJson(
                 info = info,
                 outputFolder = targetClientDir,
@@ -998,6 +1082,7 @@ class GameInstaller(
 
             //合并版本 Json 到临时目录，避免直接破坏目标版本
             task.updateProgress(0.1f)
+            ensureVanillaJson(pathConfig.tempClientDir)
             mergeGameJson(
                 info = info,
                 outputFolder = tempOutputDir,

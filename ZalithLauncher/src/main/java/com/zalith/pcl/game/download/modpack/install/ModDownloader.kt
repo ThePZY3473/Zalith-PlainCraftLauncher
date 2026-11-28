@@ -60,6 +60,15 @@ class ModDownloader(
     val mods: List<ModFile>,
     private val maxDownloadThreads: Int = currentDownloadThreads
 ) {
+    /** 被跳过的模组（解析不到地址，或源端 404），安装结束后用来提示用户。 */
+    private val skippedFiles = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+    /** 只读快照：被跳过的文件名，可能为空。 */
+    val skippedNames: List<String> get() = skippedFiles.toList()
+
+    private fun noteSkipped(mod: ModFile?) {
+        skippedFiles.add(mod?.outputFile?.name ?: "未命名文件")
+    }
     suspend fun startDownload(task: Task) {
         task.updateMessage(null)
 
@@ -79,8 +88,18 @@ class ModDownloader(
             runBatch(task, tasks, R.string.download_modpack_download_mods_retry, missingMods, skippedMods)
         }
 
-        if (resolvedFailures.get() > 0) {
-            throw DownloadFailedException("${resolvedFailures.get()} mods failed to resolve download links")
+        // 解析不到下载地址的模组按「跳过」处理，不再让整包导入失败。
+        // 整合包里常见几十个模组，其中一两个下架、被限流或没有镜像就会让 28 个一起报错，
+        // 用户实际需要的是「能装的先装上」。只有全部模组都失败时才当作真失败。
+        val unresolved = resolvedFailures.get()
+        if (unresolved > 0) {
+            Logger.warning(
+                TAG,
+                "$unresolved mods failed to resolve download links, skipped (missing=$missingMods)"
+            )
+            if (tasks.isEmpty() && mods.isNotEmpty()) {
+                throw DownloadFailedException("all $unresolved mods failed to resolve download links")
+            }
         }
 
         task.updateProgress(1f)
@@ -115,6 +134,7 @@ class ModDownloader(
                 val skipped = error is FileNotFoundException || error is NotFoundException || code == 404
                 // 跨轮次按目标文件判重，避免同一 404 文件在重试轮被重复计数
                 if (skipped && skippedMods.add(downloadTask.targetFile.absolutePath)) {
+                    skippedFiles.add(downloadTask.targetFile.name)
                     missingMods.incrementAndGet()
                 }
                 skipped
@@ -135,15 +155,18 @@ class ModDownloader(
                             throw CancellationException("mod link resolving cancelled")
                         } catch (_: FileNotFoundException) {
                             //已在源端下架（404）的模组会被跳过而不是终止安装
+                            noteSkipped(mod)
                             missingMods.incrementAndGet()
                             null
                         } catch (_: NotFoundException) {
                             //已在源端下架（404）的模组会被跳过而不是终止安装
+                            noteSkipped(mod)
                             missingMods.incrementAndGet()
                             null
                         } catch (e: Exception) {
                             if (e.isInterruptedIOException()) throw CancellationException("cancelled", e)
                             Logger.error(TAG, "Failed to resolve mod links: ${mod.outputFile?.name}", e)
+                            noteSkipped(mod)
                             resolvedFailures.incrementAndGet()
                             null
                         }

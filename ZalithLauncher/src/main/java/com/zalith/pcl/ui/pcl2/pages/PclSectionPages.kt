@@ -172,7 +172,10 @@ import com.zalith.pcl.ui.androidText
 import com.zalith.pcl.ui.screens.content.download.assets.elements.AssetsPage
 import com.zalith.pcl.ui.screens.content.download.assets.elements.initAll
 import com.zalith.pcl.ui.toAndroidString
+import com.zalith.pcl.game.download.assets.platform.mcim.mapMCIMMirrorUrls
 import com.zalith.pcl.utils.network.downloadFile
+import com.zalith.pcl.utils.network.downloadFileFromSources
+import com.zalith.pcl.utils.network.withSpeedReport
 import com.zalith.pcl.utils.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -2574,21 +2577,55 @@ internal fun startModpackImport(
         }
     }
     val total = version.platformFileSize().coerceAtLeast(1L)
+    // 下载任务把失败原因存这儿（见下面的注释）
+    var downloadFailure: Throwable? = null
 
     val downloadTask = Task.runTask(
-        id = "pcl2_modpack_download/${version.platformId()}",
+        // 【id 必须每次唯一】以前固定写 `pcl2_modpack_download/<平台ID>`：
+        // 同一个整合包点第二次下载时，`TaskSystem.submitTask` 发现同 id 任务已存在会直接返回，
+        // 新任务压根没跑；但它的 `onEnded` 会挂到那条旧任务上，旧任务结束时回调一跑，
+        // 去检查这次根本没生成的文件 —— 于是 100% 之后立刻报「整合包不见了」。
+        id = "pcl2_modpack_download/${version.platformId()}/${System.currentTimeMillis()}",
         task = { task ->
             task.updateMessage(androidText("正在下载整合包：${version.platformFileName()}"))
             var done = 0L
-            downloadFile(
-                url = version.platformDownloadUrl(),
-                outputFile = output,
-                sha1 = version.platformSha1(),
-                sizeCallback = { size ->
-                    done += size
-                    task.updateProgress((done.toDouble() / total.toDouble()).toFloat())
-                },
-            )
+            // TaskStage 里没有「失败」这一档：任务体抛异常也会被收尾成 COMPLETED，
+            // 结束回调分不出「下完了」和「下挂了」（超时、断网都会落到同一句
+            // 「包不见了」上面）。这里自己留一份原因，报错时才说得出人话。
+            downloadFailure = null
+            try {
+                // 【速度显示】之前这里从头到尾没调过 `task.updateSpeed`，界面上的「下载速度」
+                // 就一直是 0 B/s —— 看着像卡死，其实是没上报。`withSpeedReport` 每秒把
+                // 这一秒的增量喂给任务，跟原生安装器、批量下载那几条链路一致。
+                withSpeedReport(
+                    onSpeedReport = { bytes -> task.updateSpeed(bytes) },
+                    onClear = { task.clearSpeed() },
+                ) { report ->
+                    // 【只走官方源】Modrinth / CurseForge 的 CDN 在国内本身就能跑满
+                    // （原版同一个包实测 5 MB/s+），而 MCIM 中转是按连接限速的：之前把
+                    // 「镜像 + 官方」一起丢进分段池，慢的那一半连接把整体拖到几百 KB/s。
+                    // 需要中转的用户可在「设置 → 下载 → 资源平台下载源」单独切镜像。
+                    downloadFileFromSources(
+                        urls = version.platformDownloadUrl().mapMCIMMirrorUrls(),
+                        outputFile = output,
+                        sha1 = version.platformSha1(),
+                        // 有了大小才能分段并行：没有它，一个几百 MB 的包只能单连接慢慢爬
+                        expectedSize = total,
+                        sizeCallback = { size ->
+                            done += size
+                            task.updateProgress((done.toDouble() / total.toDouble()).toFloat())
+                            report(size)
+                        },
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                downloadFailure = e
+                throw e
+            } finally {
+                task.clearSpeed()
+            }
             task.updateProgress(1f)
         },
     )
@@ -2626,9 +2663,14 @@ internal fun startModpackImport(
             // 直接交给导入器只会抛一个 `FileNotFoundException` 给用户看，没人看得懂。
             if (!output.isFile || output.length() <= 0L) {
                 runtime.clearModpackImport(importId)
+                val reason = downloadFailure?.let { it.message ?: it.javaClass.simpleName }
                 runtime.submitErrorText(
                     "整合包导入失败",
-                    "下载好的整合包不见了（可能被系统清理了缓存），请重新安装一次。",
+                    if (reason != null) {
+                        "下载没有完成：$reason\n请检查网络后重试。"
+                    } else {
+                        "下载好的整合包不见了（可能被系统清理了缓存），请重新安装一次。"
+                    },
                 )
                 return@submitTask
             }

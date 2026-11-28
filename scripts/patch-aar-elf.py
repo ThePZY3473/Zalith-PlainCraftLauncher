@@ -154,9 +154,27 @@ def patch_aar(aar: Path, symbols, needed):
     return changed
 
 
+def patch_elf_file(path: Path, symbols, needed):
+    """直接就地修改裸 so（不是 AAR 里的那种，比如 jniLibs 下的预编译库）。"""
+    data = path.read_bytes()
+    try:
+        elf = Elf(data)
+    except ValueError as exc:
+        print(f"{path.name}: {exc}")
+        return 0
+    out = bytearray(data)
+    detail = patch_versym(elf, out, symbols) + patch_needed(elf, out, needed)
+    if not detail:
+        print(f"{path.name}: 没有需要修改的内容")
+        return 0
+    path.write_bytes(bytes(out))
+    print(f"{path.name}: {', '.join(detail)}")
+    return 1
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("aar", type=Path)
+    parser.add_argument("aar", type=Path, help="AAR 文件，或后缀为 .so 的裸 ELF")
     parser.add_argument("--symbol", action="append", default=[])
     parser.add_argument("--needed", action="append", default=[])
     args = parser.parse_args()
@@ -165,7 +183,10 @@ def main():
     for item in args.needed:
         old, _, new = item.partition("=")
         needed[old] = new
-    patch_aar(args.aar, set(args.symbol), needed)
+    if args.aar.suffix == ".so":
+        patch_elf_file(args.aar, set(args.symbol), needed)
+    else:
+        patch_aar(args.aar, set(args.symbol), needed)
     return 0
 
 

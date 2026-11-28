@@ -72,6 +72,9 @@ class BatchDownloader(
 
     private val files = Semaphore(maxConnections)
 
+    /** 还没下完的文件数：收尾阶段用它判断要不要给单个文件多开几条连接 */
+    private val pendingFiles = AtomicInteger(0)
+
     /** 连续永久失败计数，任何文件成功即清零；与零成功条件共同判定系统性故障 */
     private val systemicFailureCount = AtomicInteger(0)
 
@@ -89,6 +92,7 @@ class BatchDownloader(
         // 不做任何清零
         // 调用方可能在 run() 之前已把本地复用文件登记进 stats
         requests.forEach { stats.registerFile(it.expectedSize) }
+        pendingFiles.set(requests.size)
         systemicFailureCount.set(0)
         systemicAbortCause.set(null)
 
@@ -105,7 +109,12 @@ class BatchDownloader(
             }
 
             try {
-                val fileJobs = requests.map { request ->
+                // 【大文件先下】按声明大小从大到小排队。
+                // 反过来的后果很具体：几百个小文件先跑完，最后剩一两个几十 MB 的 jar，
+                // 收尾时并发从 32 掉到 1~2 条连接 —— 进度条最后那几个百分点能吃掉一半时间。
+                // 先把大的吃掉，尾巴就只剩几十个几百 KB 的小文件，几秒收干净。
+                val ordered = requests.sortedByDescending { it.expectedSize }
+                val fileJobs = ordered.map { request ->
                     launch(Dispatchers.IO) {
                         //先取得一个文件许可再打开临时文件：
                         //否则全部作业同时持着打开的句柄排队，海量句柄会拖垮存储层
@@ -162,10 +171,28 @@ class BatchDownloader(
         request: DownloadRequest,
         failures: MutableMap<String, Throwable>
     ) {
+        try {
+            runOneInner(request, failures)
+        } finally {
+            pendingFiles.decrementAndGet()
+        }
+    }
+
+    private suspend fun runOneInner(
+        request: DownloadRequest,
+        failures: MutableMap<String, Throwable>
+    ) {
         var lastError: Throwable? = null
         repeat(retryRounds + 1) {
             try {
-                FileDownloader(request, stats).download()
+                FileDownloader(
+                    request = request,
+                    stats = stats,
+                    // 只剩几个文件时，单文件多开几段，避免并发从 32 塌到 5
+                    tailBoost = { pendingFiles.get() <= TAIL_FILE_THRESHOLD },
+                    // 收尾只剩一两个文件时，连 BMCLAPI 也放开（否则它单连接 70 KB/s 拖死全局）
+                    lastFew = { pendingFiles.get() <= LAST_FEW_FILE_THRESHOLD },
+                ).download()
                 onFileSuccess?.invoke(request)
                 stats.markFileFinished()
                 systemicFailureCount.set(0)
@@ -198,6 +225,12 @@ class BatchDownloader(
     }
 
     companion object {
+        /** 待下文件少于这个数就进入「收尾阶段」，允许小文件也分段 */
+        private const val TAIL_FILE_THRESHOLD = 8
+
+        /** 只剩这么几个文件时，连 BMCLAPI 也放开分段 */
+        private const val LAST_FEW_FILE_THRESHOLD = 3
+
         private const val TAG = "BatchDownloader"
         const val DEFAULT_MAX_CONNECTIONS = 64
         const val PROGRESS_INTERVAL_MS = 100L

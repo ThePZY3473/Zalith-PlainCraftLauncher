@@ -30,7 +30,10 @@
 
 package com.zalith.pcl.ui.pcl2.pages
 
+import android.content.Context
 import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -100,6 +103,7 @@ import com.zalith.pcl.game.version.multiplayer.description.ServerDescription
 import com.zalith.pcl.game.version.multiplayer.description.StringDescription
 import com.zalith.pcl.ui.pcl2.LocalPclNav
 import com.zalith.pcl.ui.pcl2.PclCenteredPage
+import com.zalith.pcl.ui.pcl2.PclDialogHost
 import com.zalith.pcl.ui.pcl2.PclContent
 import com.zalith.pcl.ui.pcl2.PclHintHost
 import com.zalith.pcl.ui.pcl2.PclSection
@@ -124,10 +128,14 @@ import com.zalith.pcl.ui.pcl2.theme.pclHairline
 import com.zalith.pcl.ui.pcl2.theme.pclPalette
 import com.zalith.pcl.utils.formatDate
 import com.zalith.pcl.utils.network.ServerAddress
+import com.zalith.pcl.utils.file.zipDirectory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /* ============================================================================
  *  存档 / 截图 / 资源包 / 光影包 / 投影原理图
@@ -138,6 +146,29 @@ import java.io.File
 internal fun PclInstanceSavesPage(version: Version) {
     val dir = remember(version) { VersionFolders.SAVES.getDir(version.getGameDir()) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // 「备份」：把整个存档目录打成 zip，写到用户选的位置。
+    // 走 SAF（OpenDocumentTree + DocumentFile），不需要「管理设备所有文件」权限 ——
+    // 这条链路要能在没给存储权限的设备上直接用。
+    var pendingBackup by remember { mutableStateOf<File?>(null) }
+    val backupPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        val save = pendingBackup
+        pendingBackup = null
+        if (uri == null || save == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            PclHintHost.push("正在备份「${save.name}」…", PclHintTheme.Blue)
+            runCatching { pclBackupSaveAsZip(context, save, uri) }
+                .onSuccess { name -> PclHintHost.push("已备份为 $name", PclHintTheme.Green) }
+                .onFailure { e ->
+                    // 失败一定要有弹窗：提示条三秒就没了，用户只会觉得「点了没反应」
+                    PclDialogHost.show("存档备份失败", e.message ?: e.javaClass.simpleName)
+                }
+        }
+    }
+
     PclInstanceFilePage(
         dir = dir,
         searchHint = "搜索存档名称",
@@ -159,6 +190,10 @@ internal fun PclInstanceSavesPage(version: Version) {
                 thumb = thumb,
                 onClick = { openFolder(context, file) },
                 onDelete = onDelete,
+                onBackup = {
+                    pendingBackup = file
+                    backupPicker.launch(null)
+                },
             )
         },
         deleteTitle = "删除存档",
@@ -341,6 +376,7 @@ private fun PclSaveEntry(
     thumb: ImageBitmap?,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onBackup: () -> Unit,
 ) {
     val p = pclPalette
     val interaction = remember { MutableInteractionSource() }
@@ -370,6 +406,13 @@ private fun PclSaveEntry(
             .padding(start = 4.dp, top = 6.dp, end = 4.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // 「备份」摆在存档左边：把整包打包成 zip 存到用户选的位置，原存档不动
+        PclIconButton(
+            logo = PclIcons.instanceExport,
+            contentDescription = "备份存档",
+            size = 25.dp,
+        ) { onBackup() }
+        Spacer(Modifier.width(4.dp))
         Box(
             modifier = Modifier
                 .size(56.dp)
@@ -1386,3 +1429,49 @@ private fun pclDecodeThumb(file: File): ImageBitmap? = runCatching {
 
 /** 缩略图的解码上限（边长）。存档封面 56dp，按三倍屏留余量（56 × 3 ≈ 168）。 */
 private const val PCL_THUMB_MAX = 192
+
+/**
+ * 把一个存档目录打包成 zip，写进用户用 SAF 选中的文件夹。
+ *
+ * 压缩包里的条目是**相对存档根目录**的（`level.dat` 在顶层），与 `unpackSaveZip`
+ * 的导入规则对齐：导回来时 `pclInstallDownloadedSave` 会把它还原成 `saves/<存档名>/`。
+ *
+ * 先打包到缓存目录再拷进目标文档：SAF 的流一旦写失败会留下半截文件，
+ * 先落盘可以保证用户目录里出现的永远是完整包，失败时也只删自己建的那份。
+ */
+internal suspend fun pclBackupSaveAsZip(context: Context, saveDir: File, treeUri: Uri): String {
+    val resolver = context.contentResolver
+    val targetDir = DocumentFile.fromTreeUri(context, treeUri)
+        ?: throw IllegalStateException("无法访问所选文件夹，请换一个位置重试")
+
+    // 备份不覆盖同名文件：已经有了就加时间戳，否则第二次备份会把第一次的包顶掉
+    var fileName = "${saveDir.name}.zip"
+    if (targetDir.findFile(fileName) != null) {
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        fileName = "${saveDir.name}-$stamp.zip"
+    }
+    // 同一秒内重复备份（或之前留下同名包）时清掉旧的，避免出现 (1)
+    targetDir.findFile(fileName)?.delete()
+    val targetDoc = targetDir.createFile("application/zip", fileName)
+        ?: targetDir.createFile("application/octet-stream", fileName)
+        ?: throw IllegalStateException("所选文件夹不允许写入")
+
+    val cacheDir = File(context.cacheDir, "save_export").apply { mkdirs() }
+    val tempZip = File(cacheDir, fileName)
+    try {
+        zipDirectory(sourceDir = saveDir, outputZipFile = tempZip)
+        withContext(Dispatchers.IO) {
+            val output = resolver.openOutputStream(targetDoc.uri)
+                ?: throw IllegalStateException("无法写入所选文件")
+            output.use { out ->
+                tempZip.inputStream().use { it.copyTo(out) }
+            }
+        }
+        return fileName
+    } catch (e: Throwable) {
+        runCatching { targetDoc.delete() }
+        throw e
+    } finally {
+        tempZip.delete()
+    }
+}

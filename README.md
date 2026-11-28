@@ -1,23 +1,39 @@
 # ZPCL Launcher
 
-面向 **Android 设备** 的 [Minecraft: Java Edition](https://www.minecraft.net/) 启动器。
+ZPCL Launcher 是面向 Android 设备的 Minecraft: Java Edition 启动器。
 
-启动核心沿用 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2) 与
-[PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)，界面按
-[Plain Craft Launcher 2](https://github.com/Hex-Dragon/PCL2)（下称 PCL2）的版式与交互重做，
-使用 **Jetpack Compose** 编写。
+启动核心基于 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2) 与
+[PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)；界面按
+[Plain Craft Launcher 2](https://github.com/Hex-Dragon/PCL2)（下称 PCL2）的版式与交互重新实现，
+使用 Jetpack Compose 编写。
 
-> 当前版本：**1.5.5（versionCode 200088）**，基于上游 Zalith Launcher 2 **2.8.1**
-> 本项目是 Zalith Launcher 2 的**非官方修改版**，与上游官方无关联。
-> 对外名称为 ZPCL Launcher；上游 GPLv3 第 7 条附加条款与当前界面标注位置见 [NOTICE.md](NOTICE.md)。
+> 当前版本：**1.5.6（versionCode 200105）**，对应上游 Zalith Launcher 2 **2.8.1**。
+> 本项目为 Zalith Launcher 2 的非官方修改版，与上游官方无隶属关系，亦未获其背书。
+> 名称与标识的处理、修改范围、问题反馈渠道见 [NOTICE.md](NOTICE.md)。
 
-修改声明、与上游的边界、名称与标识的处理、问题该提给谁，都写在 **[NOTICE.md](NOTICE.md)**。
-本文件只讲这个启动器本身。
+---
+
+## 下载
+
+本仓库**不发布 GitHub Release**，APK 只作为 [GitHub Actions](https://github.com/ThePZY3473/Zalith-PlainCraftLauncher/actions) 的构建产物提供：
+
+1. 打开最近一次成功的 **Build CI** 运行记录；
+2. 在页面底部的 **Artifacts** 里下载 `debug apk (arm64)`；
+3. 解压后得到 APK，直接覆盖安装。
+
+| 产物 | 架构 | 适用设备 |
+|---|---|---|
+| `debug apk (arm64)` | arm64-v8a | 绝大多数 Android 手机与平板 |
+
+推送触发的构建默认只出 arm64。需要其他架构时，在 **Actions → Build APK → Run workflow** 里把 `arch` 改成 `arm`、`x86_64`、`x86` 或 `all`。
+
+Debug 变体的包名是 `com.zpcl.launcher.debug`，使用项目签名构建，可以直接覆盖安装；它和正式版 `com.zpcl.launcher` 是两个独立应用，实例与存档位于共享存储，不受影响。
 
 ---
 
 ## 目录
 
+- [下载](#下载)
 - [功能](#功能)
 - [两条产线](#两条产线)
 - [构建](#构建)
@@ -156,7 +172,7 @@ export JAVA_HOME=/path/to/jdk17
 | `docs/THIRD_PARTY.md` | 第三方组件与许可清单 |
 | `latest_version_md.json` | 应用内「检查更新」读取的版本清单 |
 | `CardGrid/` `ColorPicker/` `InputMap/` `LayerController/` `LWJGL/` `Terracotta/` | 渲染、输入、联机等子模块 |
-| `.github/workflows/` | GitHub Actions：推送时只做 Debug 编译校验，不注入发行配置、不上传 APK |
+| `.github/workflows/` | GitHub Actions：推送时做 Debug 编译校验并上传 Debug APK 产物，不注入发行配置 |
 
 ---
 
@@ -164,7 +180,7 @@ export JAVA_HOME=/path/to/jdk17
 
 本仓库 Releases 不挂 APK ，可以在 Action 里找到 APK 。
 
-**关于 CI：** 推送触发的 [构建工作流](.github/workflows/push_ci.yml) 只做 Debug 编译校验，不向 Debug 构建注入正版登录或 CurseForge 配置，也不上传 APK 产物。只有以 `Release` 变体调用时才使用仓库 Secrets；这类构建由维护者自己发起，不构成公开下载渠道。
+**关于 CI：** 推送触发的 [构建工作流](.github/workflows/push_ci.yml) 只做 Debug 编译校验，不向 Debug 构建注入正版登录或 CurseForge 配置；编译产物以 `debug apk (<架构>)` 的名义上传到运行记录的 Artifacts，供测试下载。只有以 `Release` 变体调用时才使用仓库 Secrets；这类构建由维护者自己发起，需要对应架构的 RELEASE 时才手动触发。
 
 正式发行时：
 
@@ -199,6 +215,8 @@ export JAVA_HOME=/path/to/jdk17
 感谢 [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2)、
 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)、
 [PCL2](https://github.com/Hex-Dragon/PCL2) 以及所有上游依赖的作者。
+
+界面按 PCL2 的版式与交互重新实现，未使用 PCL2 的源代码；PCL2 以 GNU GPLv3 发布，仓库地址 <https://github.com/Hex-Dragon/PCL2>。
 
 ---
 

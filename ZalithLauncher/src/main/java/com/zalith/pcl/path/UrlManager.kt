@@ -32,16 +32,44 @@ import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 val URL_USER_AGENT: String = "${BuildKeys.LAUNCHER_SHORT_NAME}/Android_${BuildConfig.VERSION_NAME}"
 val TIME_OUT = TimeUnit.SECONDS.toMillis(10L)
+
+/**
+ * 磁盘 HTTP 缓存（PCL 的 CacheCow 干的就是这件事）。
+ *
+ * 版本清单、项目信息这些 JSON 在小半天里几乎不变，但每次进下载页都会重新拉一遍；
+ * 缓存之后第二次打开是本地读盘。只缓存 `.json`，安装包/资源文件一律不碰 ——
+ * 那些文件本来就有 sha1 校验，走缓存只会增加磁盘占用。
+ */
+private val HTTP_CACHE: Cache? by lazy {
+    runCatching {
+        Cache(File(com.zalith.pcl.path.PathManager.DIR_CACHE, "http_cache"), 64L * 1024 * 1024)
+    }.getOrNull()
+}
+
+/** 给 JSON 响应补上可缓存的头：多数镜像根本不发 Cache-Control，不加就等于没缓存 */
+private val JSON_CACHE_INTERCEPTOR = Interceptor { chain ->
+    val response = chain.proceed(chain.request())
+    if (chain.request().url.encodedPath.endsWith(".json", ignoreCase = true)) {
+        response.newBuilder()
+            .header("Cache-Control", "public, max-age=300")
+            .removeHeader("Pragma")
+            .build()
+    } else {
+        response
+    }
+}
 
 const val HOST_CURSEFORGE_API = "api.curseforge.com"
 const val CURSEFORGE_CDN_SUFFIX = "forgecdn.net"
@@ -186,6 +214,8 @@ fun createOkHttpClientBuilder(action: (OkHttpClient.Builder) -> Unit = { }): OkH
         .sslSocketFactory(TLSSecurity.sslSocketFactory, TLSSecurity.trustManager)
         .protocols(listOf(Protocol.HTTP_1_1))
         .callTimeout(TIME_OUT, TimeUnit.MILLISECONDS)
+        .cache(HTTP_CACHE)
+        .addNetworkInterceptor(JSON_CACHE_INTERCEPTOR)
         .addInterceptor(CURSEFORGE_INTERCEPTOR)
         .addInterceptor(USER_AGENT_INTERCEPTOR)
         .apply(action)
@@ -217,6 +247,8 @@ private fun buildDownloadClient(
         .readTimeout(readTimeoutMillis, TimeUnit.MILLISECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        .cache(HTTP_CACHE)
+        .addNetworkInterceptor(JSON_CACHE_INTERCEPTOR)
         .addInterceptor(CURSEFORGE_INTERCEPTOR)
         .addInterceptor(USER_AGENT_INTERCEPTOR)
         .build()
