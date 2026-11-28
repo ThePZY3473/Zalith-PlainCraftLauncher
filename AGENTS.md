@@ -146,27 +146,6 @@ git diff upstream/main -- README.md NOTICE.md
 - 测试机走 `adb connect 127.0.0.1:5667`（Android 7.1.2 / SDK 25 / arm64 / vmos）；
   重启设备前必须先问用户。
 
-## SDL3 桌面 GL 查询补丁（2026-11，修 MobileGlues 下 Cleanroom 启动崩溃）
-
-- 现象：Cleanroom 0.7.16 + MobileGlues 启动即崩，
-  `SDL_GL_GetAttribute(6) failed: OpenGL error: GL_INVALID_ENUM`（`6` = `SDL_GL_DEPTH_SIZE`）。
-  SDL3 把该属性翻译成桌面 GL 的 `glGetIntegerv(GL_DEPTH_BITS = 0xD56)`，GLES
-  规范没有这个枚举；MobileGlues 对未知 pname 直接透传给驱动，驱动返回
-  `GL_INVALID_ENUM`，SDL 据此判定查询失败，Cleanroom 无法接管上下文。
-- 先试过在 SDL 与 EGL 入口之间插一层 shim（`SDL_EGL_LIBRARY` 指向 shim、
-  `EGLSHIM_REAL_LIB` 指向真实库），但 SDL 实际没有走这条加载路径，shim 从未
-  被加载，已放弃并删除，不要重复这个思路。
-- 最终做法：`python3 scripts/patch-sdl-desktop-gl.py ZalithLauncher/libs/SDL-release.aar`
-  直接改 AAR 里 `jni/arm64-v8a/libSDL3.so` 的 `SDL_GL_GetAttribute`
-  （偏移相对函数起始，固定）：
-  1. `0x110`：`mov w19,#0xd56` → `mov w8,#24`，`0x114` 的 `b` 改指向
-     `str w8,[x1]`，即 DEPTH_SIZE 不再查询驱动，直接返回 24；
-  2. `0x25C`：`cbz w0, …` → `b …`，其余位深属性（red/green/blue/alpha/stencil）
-     查询失败也当成功，值为 0。
-- `libSDL2.so` 只是把 SDL2 的 attr 换表后尾调用 SDL3 的实现，因此只改 SDL3 即可。
-- 脚本会校验原指令，SDL 版本变了会直接报错而不是改坏；上游换 SDL 版本后要重跑。
-- 对 Krypton / GL4ES 等本来就能查到值的渲染器行为不变（它们不进错误分支）。
-
 ## SimpleFPEWrapper 现状（2026-11，已接线）
 
 结论：**Kotlin 侧接线已完成**，对齐上游 ZalithLauncher2 2.8.2 的做法。
