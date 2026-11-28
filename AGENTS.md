@@ -146,6 +146,25 @@ git diff upstream/main -- README.md NOTICE.md
 - 测试机走 `adb connect 127.0.0.1:5667`（Android 7.1.2 / SDK 25 / arm64 / vmos）；
   重启设备前必须先问用户。
 
+## EGL shim（2026-11，修 MobileGlues 下 Cleanroom 启动崩溃）
+
+- 现象：Cleanroom 0.7.16 + MobileGlues 启动即崩，
+  `SDL_GL_GetAttribute(6) failed: OpenGL error: GL_INVALID_ENUM`（`6` = `SDL_GL_DEPTH_SIZE`）。
+  SDL3 把该属性翻译成桌面 GL 的 `glGetIntegerv(GL_DEPTH_BITS = 0xD56)`，GLES
+  规范没有这个枚举；MobileGlues 对未知 pname 直接透传给驱动，驱动返回
+  `GL_INVALID_ENUM`，SDL 据此判定查询失败，Cleanroom 无法接管上下文。
+- 修法：`jni/egl_shim.c` → `libeglshim.so`。`GameLauncher.setRendererEnv` 里当渲染器是
+  MobileGlues 时插在 SDL 与 EGL 入口之间：
+  - `EGLSHIM_REAL_LIB` = 原来的 `SDL_EGL_LIBRARY`（可能是 SFPEW 路径）
+  - `SDL_EGL_LIBRARY` = `libeglshim.so` 路径
+- shim 把 `eglGetProcAddress` 返回的 `glGetIntegerv` 换成本地实现：
+  RED/GREEN/BLUE/ALPHA_BITS 返回 8、DEPTH_BITS 返回 24、STENCIL_BITS 返回 8，
+  其余 pname 和所有 EGL 入口原样转发给 `EGLSHIM_REAL_LIB`。
+- 只在 MobileGlues 下启用；Krypton / GL4ES / ANGLE 等自己实现桌面 GL 枚举的渲染器
+  不插，避免回归。
+- 顺序要求：shim 必须在 SFPEW 处理之后注入，否则 `EGLSHIM_REAL_LIB` 会拿到渲染器
+  路径而不是 SFPEW 路径，链路变成 SDL → shim → 渲染器，跳过 SFPEW。
+
 ## SimpleFPEWrapper 现状（2026-11，已接线）
 
 结论：**Kotlin 侧接线已完成**，对齐上游 ZalithLauncher2 2.8.2 的做法。

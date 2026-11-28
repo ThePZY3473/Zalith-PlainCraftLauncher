@@ -56,6 +56,8 @@ import com.zalith.pcl.game.plugin.renderer.RendererPluginManager
 import com.zalith.pcl.game.renderer.RendererCompat
 import com.zalith.pcl.game.renderer.Renderers
 import com.zalith.pcl.game.renderer.getSfpewLibraryPath
+import com.zalith.pcl.game.renderer.getEglShimLibraryPath
+import com.zalith.pcl.game.renderer.needsDesktopGlQueryShim
 import com.zalith.pcl.game.renderer.isSfpewEnabledFor
 import com.zalith.pcl.game.renderer.renderers.GL4ESRenderer
 import com.zalith.pcl.game.renderer.renderers.NGGL4ESRenderer
@@ -680,6 +682,18 @@ private fun setRendererEnv(envMap: MutableMap<String, String>, version: Version)
         val sfpewLibraryPath = getSfpewLibraryPath()
         envMap["SDL_OPENGL_LIBRARY"] = sfpewLibraryPath
         envMap["SDL_EGL_LIBRARY"] = sfpewLibraryPath
+    }
+
+    // MobileGlues 直接把 GL 调用透传给 GLES 驱动，SDL3 在
+    // SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE) 里查询的 GL_DEPTH_BITS 等桌面
+    // GL 枚举会被驱动判为 GL_INVALID_ENUM，Cleanroom 因此无法接管上下文。
+    // 在 SDL 与当前 EGL 入口之间插一层转发库，只拦截这些查询。
+    if (needsDesktopGlQueryShim(renderer)) {
+        val realEgl = envMap["SDL_EGL_LIBRARY"]
+            ?: envMap["POJAVEXEC_EGL"]
+            ?: "libEGL.so"
+        envMap["EGLSHIM_REAL_LIB"] = realEgl
+        envMap["SDL_EGL_LIBRARY"] = getEglShimLibraryPath()
     }
 
     if (RendererPluginManager.selectedRendererPlugin != null) return
