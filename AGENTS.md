@@ -75,13 +75,9 @@ git diff upstream/main -- README.md NOTICE.md
 ### NOTICE.md 的 3 处定制
 
 1. **仓库地址**
-   上游写 `zuanxu53-hub/ZPCL-Launcher`，本 fork 写 `CutePZY/ZPCL-Launcher`
+   上游写 `zuanxu53-hub/ZPCL-Launcher`，本 fork 写 `CThePZY3473/ZPCL-Launcher`
    （出现在「本仓库」条目和「五、问题反馈」的 Issues 链接里，两处都要改）。
 
-   ⚠️ **待核实**：当前 `git remote -v` 的 origin 是
-   `ThePZY3473/Zalith-PlainCraftLauncher`，和文档里的 `CutePZY/ZPCL-Launcher`
-   对不上。下次动文档时先跟用户确认仓库最终地址，再统一改这两处 + `docs/THIRD_PARTY.md`
-   之外的相关链接。别自己猜。
 
 2. **「三、开发源码与安装包的对应关系」末段**
    上游原文：
