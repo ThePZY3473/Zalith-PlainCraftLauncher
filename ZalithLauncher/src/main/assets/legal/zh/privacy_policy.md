@@ -226,8 +226,8 @@ ZPCL 功能、服务提供方或法律义务发生变化时，我们可能更新
 
 如有隐私问题、权利请求或安全报告，可通过以下方式联系 ZPCL Launcher 项目组：
 
-- **项目主页：** <https://github.com/zuanxu53-hub/ZPCL-Launcher>
-- **问题反馈：** <https://github.com/zuanxu53-hub/ZPCL-Launcher/issues>
+- **项目主页：** <https://github.com/ThePZY3473/Zalith-PlainCraftLauncher>
+- **问题反馈：** <https://github.com/ThePZY3473/Zalith-PlainCraftLauncher/issues>
 - **电子邮箱：** 3522762908@qq.com
 
 涉及敏感安全问题时，请发送邮件至 3522762908@qq.com，不要在公开 Issue 中披露细节。请勿附上密码、访问令牌、刷新令牌或未经检查的日志。

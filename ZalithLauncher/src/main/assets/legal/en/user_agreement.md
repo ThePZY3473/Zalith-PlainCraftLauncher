@@ -31,7 +31,7 @@ Nothing in this Agreement limits rights granted to you by an applicable open-sou
 
 The official source code, license text, and project information are available at:
 
-https://github.com/zuanxu53-hub/ZPCL-Launcher
+https://github.com/ThePZY3473/Zalith-PlainCraftLauncher
 
 ZPCL Launcher is an unofficial modified build of Zalith Launcher 2 (https://github.com/ZalithLauncher/ZalithLauncher2) and is not affiliated with or endorsed by the upstream author. This Agreement is adapted from the upstream agreement of the same name; only the project identity, distribution channels, and contact details are adjusted. The upstream additional terms under GPLv3 section 7 continue to apply: this build does not use the upstream name or its abbreviation as its own identifier, and it is labelled as an unofficial modified build on the launcher screens.
 
@@ -170,8 +170,8 @@ This Agreement is available in English and Simplified Chinese. Both versions are
 
 For questions about this Agreement, contact the ZPCL Launcher project through:
 
-- **Project:** https://github.com/zuanxu53-hub/ZPCL-Launcher
-- **Issues:** https://github.com/zuanxu53-hub/ZPCL-Launcher/issues
+- **Project:** https://github.com/ThePZY3473/Zalith-PlainCraftLauncher
+- **Issues:** https://github.com/ThePZY3473/Zalith-PlainCraftLauncher/issues
 - **Email:** 3522762908@qq.com
 
 Please do not send passwords, access tokens, refresh tokens, or complete unreviewed logs when contacting us.

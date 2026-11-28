@@ -88,8 +88,9 @@ git diff upstream/main -- README.md NOTICE.md
 ### NOTICE.md 的 3 处定制
 
 1. **仓库地址**
-   上游写 `zuanxu53-hub/ZPCL-Launcher`，本 fork 写 `CThePZY3473/ZPCL-Launcher`
+   上游写 `zuanxu53-hub/ZPCL-Launcher`，本 fork 写 `ThePZY3473/Zalith-PlainCraftLauncher`
    （出现在「本仓库」条目和「五、问题反馈」的 Issues 链接里，两处都要改）。
+   这个名字必须和 `git remote -v` 的 origin 一致，别按上游的仓库名去拼。
 
 
 2. **「三、开发源码与安装包的对应关系」末段**
@@ -145,37 +146,56 @@ git diff upstream/main -- README.md NOTICE.md
 - 测试机走 `adb connect 127.0.0.1:5667`（Android 7.1.2 / SDK 25 / arm64 / vmos）；
   重启设备前必须先问用户。
 
-## SimpleFPEWrapper 现状（2026-11）
+## SimpleFPEWrapper 现状（2026-11，已接线）
 
-结论：**目前是"只有壳、没接线"的状态，编译进 APK 但运行时不生效。**
-
-具体：
+结论：**Kotlin 侧接线已完成**，对齐上游 ZalithLauncher2 2.8.2 的做法。
 
 - `ZalithLauncher/libs/SimpleFPEWrapper-release.aar` 随仓库提供（arm64-v8a / armeabi-v7a /
   x86 / x86_64 四套 `libSimpleFPEWrapper.so`），Gradle 通过 `fileTree(libs)` 一并打包进 APK。
 - `classes.jar` 是 22 字节的空壳，AAR 只有 native 库，`AndroidManifest.xml` 声明 minSdk 26，
   靠本 fork 的 `tools:overrideLibrary="top.mobilegl.simplefpewrapper"` 在 minSdk 24 上放行。
-- Kotlin 侧只有 `game/renderer/SimpleFPEWrapper.kt` 里的四个函数：
-  `getSfpewLibraryPath()`、`isSfpewConfiguredFor()`、`isSfpewEnabledFor()`、`detectFpeEmulatorMods()`。
-- **`getSfpewLibraryPath()` 和 `isSfpewEnabledFor()` 没有任何调用者**（上游 2.8.1 也是如此，
-  不是本 fork 删掉的）。也就是说没有任何代码把 `libSimpleFPEWrapper.so` 预加载进渲染器进程，
-  也没有设置 `SFPEW_LAYER` 之类的环境变量。`MobileGluesRenderer.getConfiguredEnv()` 只加了
-  `MG_DIR_PATH`。
-- 实际生效的只有 UI 和检测部分：
-  - `supportsSfpewByDefault()`：只有 MobileGlues 返回 true；
-  - 设置项 `sfpewPluginLayer` / `sfpewRelaxedContext`（全局 + 版本级）；
-  - `detectFpeEmulatorMods()` 会识别 `angelica` / `actinium`，检测到就禁用兼容层；
-  - `LauncherElements.kt:312` 用 `isSfpewConfiguredFor()` 给低版本游戏弹提示。
-- 对当前测试版本（1.12.2-Cleanroom + Krypton Wrapper）**没有任何影响**，因为 Krypton 不是
-  Plugin 且 `supportsSfpewByDefault()` 为 false。
 
-要真正接线，需要在新版本上补这些（目前没做，也不在上游计划里）：
+### 接线方式（不是预加载，是顶替 SDL 的 GL/EGL 入口）
 
-1. 启动时若 `isSfpewEnabledFor(...)` 为 true，把 `libSimpleFPEWrapper.so` 用
-   `RTLD_GLOBAL` 预加载到 **游戏进程**，或者通过 `LD_PRELOAD` 等效机制注入；
-2. 确认 SFPEW 期望的入口符号/环境变量（看 MobileGL-Dev/SimpleFPEWrapper 源码），
-   把渲染器插件包装层串起来；
-3. minSdk 24 上还要验证它的 `libc` 符号引用是否又缺 Android 8+ 的符号
-   （`@LIBC_O` 那一类问题，参考 `libshm.so` 的做法）。
+上游的做法是让 SFPEW 直接充当 SDL 的 GL 和 EGL 库，它内部再按 `SFPEW_EGL` 去 dlopen
+真正的渲染器。本 fork 在 `game/launch/GameLauncher.kt` 里照搬：
 
-在接线完成前，别在 UI 上把它写成"可用功能"。
+1. `setRendererEnv()` 里，`isSfpewEnabledFor(renderer, version)` 为真时：
+   - `SFPEW_LAYER=1`
+   - `SFPEW_EGL` = 已设置的 `SDL_EGL_LIBRARY` → `POJAVEXEC_EGL` → `libEGL.so`
+   - 版本开了宽松上下文时 `SFPEW_RELAXED_CONTEXT=1`
+   - `SDL_OPENGL_LIBRARY` 与 `SDL_EGL_LIBRARY` 都改成 `getSfpewLibraryPath()`
+2. `progressFinalUserArgs()` 里 `-Dorg.lwjgl.opengl.libname` 改走
+   `getGameRendererLibrary(version)`（启用时返回 SFPEW 路径），否则 LWJGL 会绕过兼容层。
+3. `dlopenEngine()` 里仍然 dlopen **原渲染器库**（上游也是这样），用于启动器进程的探测。
+
+### 启用条件
+
+沿用 2.8.1 的两参数判定：`!version.fpeEmulatorModDetected && isSfpewConfiguredFor(...)`。
+
+- 插件渲染器 → 版本级 `sfpewPluginLayer`（默认 `FOLLOW_GLOBAL`，全局默认 **false**）
+- 内置渲染器 → `supportsSfpewByDefault()`，目前只有 MobileGlues 返回 true
+- `detectFpeEmulatorMods()` 识别 `angelica` / `actinium`，检测到就禁用
+
+因此默认行为：**Krypton Wrapper（插件）+ 全局开关关闭 → 不启用**；MobileGlues 默认启用。
+测试 1.12.2-Cleanroom 时请留意渲染器是不是 MobileGlues，别把 SFPEW 的问题算到 Krypton 头上。
+
+### 未移植的两点（上游 2.8.2 有）
+
+- 渲染器级开关 `ConfigTarget.SfpewLayer` / `LoadedRenderer.sfpewLayerEnabled`：
+  我们这版没有 `RendererLaunchConfig` 那套，先沿用全局 + 版本级设置。
+- FPE 的版本下限豁免：我们这版 `MobileGluesRenderer` 没覆盖 `getMinMCVersion()`，
+  本来就不拦版本，不需要。
+
+### Android 7 上的 AAR
+
+上游原版 so 引用了 `nl_langinfo@LIBC_O`（Android 8+）。本仓库里的 AAR 已 patch 过：
+
+```bash
+python3 scripts/patch-aar-elf.py ZalithLauncher/libs/SimpleFPEWrapper-release.aar \
+    --symbol nl_langinfo --needed liblog.so=libshm.so
+```
+
+`--needed` 是必须的：`nl_langinfo` 在 Android 7 的 libc 里不存在，只有让 `libshm.so`
+进 local group 才能解析到 `locale_shim.c` 里的实现；`libshm` 自己依赖 `liblog`，
+`__android_log_print` 照样能用。上游换新版 AAR 时这条命令要重跑。

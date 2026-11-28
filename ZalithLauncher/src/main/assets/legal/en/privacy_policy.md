@@ -226,8 +226,8 @@ After any change to this Policy or the User Agreement, the next time you open th
 
 For privacy questions, requests, or security reports, contact the ZPCL Launcher project through:
 
-- **Project:** https://github.com/zuanxu53-hub/ZPCL-Launcher
-- **Issues:** https://github.com/zuanxu53-hub/ZPCL-Launcher/issues
+- **Project:** https://github.com/ThePZY3473/Zalith-PlainCraftLauncher
+- **Issues:** https://github.com/ThePZY3473/Zalith-PlainCraftLauncher/issues
 - **Email:** 3522762908@qq.com
 
 For sensitive security reports, prefer email rather than posting details publicly. Do not include passwords, access tokens, refresh tokens, or unreviewed logs.

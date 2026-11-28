@@ -7,7 +7,7 @@
 - **上游项目**：Zalith Launcher 2 — <https://github.com/ZalithLauncher/ZalithLauncher2>
 - **上游源码基线**：2.8.1（2026-11 合并；此前基线为 2.6.1）
 - **上游版权**：Copyright (C) 2025–2026 MovTery <movtery228@qq.com> and contributors；各文件原有的版权和许可声明以该文件为准。
-- **本仓库**：<https://github.com/CutePZY/ZPCL-Launcher>
+- **本仓库**：<https://github.com/ThePZY3473/Zalith-PlainCraftLauncher>
 - **许可证**：本项目按 GNU GPLv3 分发，全文见 [LICENSE](LICENSE)；带有「第 3 版或更高版本」许可声明的文件保留其原有授权。第三方内容按各自许可处理。
 - **无担保**：在适用法律允许的范围内，本程序按现状提供，不附带任何明示或默示担保。详见 [LICENSE](LICENSE) 第 15、16 节。
 
@@ -52,4 +52,4 @@ Zalith Launcher 2 在上游 README 中列明以下附加条款：
 
 ## 五、问题反馈
 
-本修改版的问题请在 [ZPCL Launcher Issues](https://github.com/CutePZY/ZPCL-Launcher/issues) 反馈，不要提交到上游。请附版本号（PCL 界面 → 更多 → 关于与鸣谢）、设备型号、Android 版本、复现步骤和已去除敏感信息的日志。
+本修改版的问题请在 [ZPCL Launcher Issues](https://github.com/ThePZY3473/Zalith-PlainCraftLauncher/issues) 反馈，不要提交到上游。请附版本号（PCL 界面 → 更多 → 关于与鸣谢）、设备型号、Android 版本、复现步骤和已去除敏感信息的日志。
