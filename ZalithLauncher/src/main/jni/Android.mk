@@ -182,14 +182,3 @@ LOCAL_SRC_FILES := locale_shim.c
 LOCAL_LDLIBS := -llog
 include $(BUILD_SHARED_LIBRARY)
 
-# SDL3 在 EGL 后端下把 SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE) 翻译成桌面 GL 的
-# GL_DEPTH_BITS 并调用 glGetIntegerv 查询，随后检查 glGetError()。GLES 规范里
-# 没有这些枚举，直通 GLES 的渲染器（MobileGlues）会让驱动返回 GL_INVALID_ENUM，
-# SDL 判定失败，Cleanroom 无法接管上下文、游戏初始化崩溃。本库插在 SDL 与渲染
-# 器之间，拦截这些查询并返回合理常量；其余 EGL 入口原样转发。
-# 详见 egl_shim.c 与 GameLauncher.setRendererEnv。
-include $(CLEAR_VARS)
-LOCAL_MODULE := eglshim
-LOCAL_SRC_FILES := egl_shim.c
-LOCAL_LDLIBS := -llog -ldl
-include $(BUILD_SHARED_LIBRARY)
